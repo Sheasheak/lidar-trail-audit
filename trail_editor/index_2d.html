@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Trail Line Editor — LiDAR Trail Audit</title>
+
+<!-- Leaflet -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- Leaflet-Geoman (vertex editing) -->
+<link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.18.3/dist/leaflet-geoman.css" />
+<script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.18.3/dist/leaflet-geoman.js"></script>
+
+<style>
+  html, body { height: 100%; margin: 0; font-family: system-ui, sans-serif; }
+  #map { position: absolute; top: 0; bottom: 0; left: 0; right: 320px; }
+  #panel {
+    position: absolute; top: 0; bottom: 0; right: 0; width: 320px;
+    background: #1e1e24; color: #eee; padding: 16px; box-sizing: border-box;
+    overflow-y: auto; box-shadow: -2px 0 8px rgba(0,0,0,.4);
+  }
+  #panel h1 { font-size: 17px; margin: 0 0 4px; }
+  #panel .sub { color: #9aa; font-size: 12px; margin-bottom: 14px; }
+  .grp { border-top: 1px solid #333; padding: 12px 0; }
+  .grp h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
+            color: #8bd; margin: 0 0 8px; }
+  button {
+    width: 100%; padding: 9px; margin: 4px 0; border: 0; border-radius: 6px;
+    background: #2d6cdf; color: #fff; font-size: 13px; cursor: pointer;
+  }
+  button.sec { background: #3a3a44; }
+  button:hover { filter: brightness(1.12); }
+  label.row { display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 6px 0; }
+  input[type=range] { flex: 1; }
+  .stat { font-size: 13px; color: #cde; margin: 3px 0; }
+  .stat b { color: #fff; }
+  .hint { font-size: 11px; color: #99a; line-height: 1.45; margin-top: 6px; }
+  input[type=file] { font-size: 12px; color: #ccc; width: 100%; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="panel">
+  <h1>Trail Line Editor</h1>
+  <div class="sub">Correct the trail line against LiDAR &amp; aerial imagery</div>
+
+  <div class="grp">
+    <h2>How to use</h2>
+    <div class="hint">
+      Drag the <b>white vertices</b> to move the line onto the real track.
+      Click a mid-point handle to add a vertex; right-click a vertex to delete.
+      Use the layer control (top-right of map) to switch aerial / hillshade / slope.
+    </div>
+  </div>
+
+  <div class="grp">
+    <h2>DEM overlay opacity</h2>
+    <label class="row">Hillshade <input id="hsOp" type="range" min="0" max="1" step="0.05" value="0.55"></label>
+    <label class="row">Slope <input id="slOp" type="range" min="0" max="1" step="0.05" value="0.55"></label>
+    <div class="hint">Hillshade/slope reveal the graded bench under tree canopy where aerial can't see it.</div>
+  </div>
+
+  <div class="grp">
+    <h2>Trail</h2>
+    <div class="stat">Vertices: <b id="nVerts">–</b></div>
+    <div class="stat">Length: <b id="length">–</b></div>
+    <button id="reset" class="sec">Reset to original line</button>
+    <label class="row" style="margin-top:8px">Load a KML: <input id="kmlFile" type="file" accept=".kml"></label>
+    <div class="hint">Load any Trailforks/GPS KML to edit a different trail (DEM overlays are Askins-only for now).</div>
+  </div>
+
+  <div class="grp">
+    <h2>Export corrected line</h2>
+    <button id="expKml">Download KML</button>
+    <button id="expGeo" class="sec">Download GeoJSON</button>
+    <div class="hint">Feed the exported file back into your grading pipeline to measure the accuracy gain.</div>
+  </div>
+</div>
+
+<script src="askins_data.js"></script>
+<script>
+// ---- LINZ API key (LDS). NOTE: exposed client-side; restrict the key by
+// domain in your LINZ account before any public deploy. ----
+const LINZ_KEY = "24d5daf2151847f7b7db497b10ea8712";
+const AERIAL = "https://tiles-cdn.koordinates.com/services;key=" + LINZ_KEY +
+               "/tiles/v4/layer=123118,style=auto/EPSG:3857/{z}/{x}/{y}.png";
+const attribution = "Imagery: LINZ CC BY 4.0 | LiDAR DEM: LINZ";
+
+const aerial = L.tileLayer(AERIAL, { maxZoom: 22, maxNativeZoom: 22, attribution });
+const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+             { maxZoom: 19, attribution: "© OpenStreetMap" });
+
+const map = L.map("map", { center: ASKINS.center, zoom: 16, layers: [aerial] });
+
+// DEM overlays (EPSG:3857 PNGs, bounds precomputed)
+const hillshade = L.imageOverlay("hillshade.png", ASKINS.hillshadeBounds, { opacity: 0.55 });
+const slope     = L.imageOverlay("slope.png",     ASKINS.slopeBounds,     { opacity: 0.55 });
+
+L.control.layers(
+  { "LINZ aerial (2025)": aerial, "OpenStreetMap": osm },
+  { "LiDAR hillshade": hillshade, "LiDAR slope": slope },
+  { collapsed: false }
+).addTo(map);
+
+document.getElementById("hsOp").oninput = e => hillshade.setOpacity(+e.target.value);
+document.getElementById("slOp").oninput = e => slope.setOpacity(+e.target.value);
+
+// ---- the editable trail ----
+let trail = null;
+function toLatLngs(geojson) {
+  return geojson.geometry.coordinates.map(c => [c[1], c[0]]);
+}
+function loadTrail(latlngs, fit) {
+  if (trail) map.removeLayer(trail);
+  trail = L.polyline(latlngs, { color: "#ff00ff", weight: 3 }).addTo(map);
+  trail.pm.enable({ allowSelfIntersection: true });
+  trail.on("pm:edit", updateStats);
+  trail.on("pm:vertexadded", updateStats);
+  trail.on("pm:vertexremoved", updateStats);
+  if (fit) map.fitBounds(trail.getBounds(), { padding: [30, 30] });
+  updateStats();
+}
+function haversine(a, b) {
+  const R = 6371000, toR = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * toR, dLng = (b.lng - a.lng) * toR;
+  const la1 = a.lat * toR, la2 = b.lat * toR;
+  const h = Math.sin(dLat/2)**2 + Math.cos(la1)*Math.cos(la2)*Math.sin(dLng/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+function updateStats() {
+  const pts = trail.getLatLngs();
+  let len = 0;
+  for (let i = 1; i < pts.length; i++) len += haversine(pts[i-1], pts[i]);
+  document.getElementById("nVerts").textContent = pts.length;
+  document.getElementById("length").textContent = len.toFixed(0) + " m";
+}
+
+loadTrail(toLatLngs(ASKINS.trail), true);
+
+// ---- reset ----
+document.getElementById("reset").onclick = () => loadTrail(toLatLngs(ASKINS.trail), true);
+
+// ---- load a different KML ----
+document.getElementById("kmlFile").onchange = ev => {
+  const file = ev.target.files[0];
+  if (!file) return;
+  const r = new FileReader();
+  r.onload = () => {
+    const m = r.result.match(/<coordinates>([\s\S]*?)<\/coordinates>/);
+    if (!m) { alert("No <coordinates> found in that KML."); return; }
+    const latlngs = m[1].trim().split(/\s+/).map(c => {
+      const p = c.split(","); return [parseFloat(p[1]), parseFloat(p[0])];
+    });
+    loadTrail(latlngs, true);
+  };
+  r.readAsText(file);
+};
+
+// ---- exports ----
+function download(name, text, mime) {
+  const blob = new Blob([text], { type: mime });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  URL.revokeObjectURL(a.href);
+}
+document.getElementById("expGeo").onclick = () => {
+  const coords = trail.getLatLngs().map(p => [p.lng, p.lat]);
+  const gj = { type: "Feature", properties: { name: "corrected_trail" },
+               geometry: { type: "LineString", coordinates: coords } };
+  download("trail_corrected.geojson", JSON.stringify(gj, null, 2), "application/geo+json");
+};
+document.getElementById("expKml").onclick = () => {
+  const coordStr = trail.getLatLngs().map(p => p.lng + "," + p.lat + ",0").join(" ");
+  const kml =
+`<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2"><Document>
+<Placemark><name>corrected_trail</name>
+<LineString><tessellate>1</tessellate><coordinates>${coordStr}</coordinates></LineString>
+</Placemark></Document></kml>`;
+  download("trail_corrected.kml", kml, "application/vnd.google-earth.kml+xml");
+};
+</script>
+</body>
+</html>

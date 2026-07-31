@@ -1,0 +1,25 @@
+# TrailAudit v8 dependencies.
+#
+# NOTE: on Shea's PC there is no standalone Python — the only working interpreter
+# is the one bundled with QGIS 4.0.3, which already provides numpy, scipy, shapely,
+# pyproj, matplotlib, plotly, requests and lxml. This file lists everything the
+# notebook imports for completeness / portability to a normal venv. On the QGIS
+# kernel only the last block actually needed installing.
+pykml
+lxml
+shapely
+pyproj
+numpy
+scipy
+matplotlib
+folium
+plotly
+requests
+# widgets / kernel (the parts missing from QGIS python)
+ipyleaflet
+ipywidgets>=8
+ipykernel
+nbformat
+# DEM editor overlays (cell 7) + companion 3D view (cell 9)
+rasterio          # read/warp the local bare-earth DEM GeoTIFF
+anywidget         # required by plotly's FigureWidget for the inline 3D view

@@ -1,0 +1,18 @@
+Trail: Askins MTB (Christchurch)
+Source: KML GPS elevations, 50m smoothing window
+
+Total length:      2118 m
+Start elevation:   239 m
+End elevation:     47 m
+Total descent:     -192 m
+Average gradient:  -9.1%
+
+Max descent (50m): -31.8% at 632m from start
+Max ascent (50m):  27.8% at 1404m from start
+
+Gradient distribution (50m smoothed):
+  Flat       (0-5%):  37%
+  Moderate (5-15%):  29%
+  Steep   (15-30%):  31%
+  Very steep (>30%): 1%
+  Uphill sections:   6%

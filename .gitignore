@@ -1,0 +1,38 @@
+# Secrets
+.env
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+venv/
+.venv/
+
+# Build artifacts (PyInstaller)
+build/
+dist/
+*.spec.bak
+
+# LINZ elevation response cache (regenerates on run)
+cache/
+*.npz
+
+# Notebook backups
+*.backup_*.ipynb
+
+# Logs / scratch
+*.log
+app_log.txt
+out.txt
+walk.txt
+
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# QGIS
+*.qgz~
+*.gpkg-shm
+*.gpkg-wal

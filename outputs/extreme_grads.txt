@@ -1,0 +1,21 @@
+Extreme gradient points (>50%):
+  dist=1932m  elev=81.5m (prev=83.6m)  grad=-1575.2%
+  dist=1256m  elev=115.2m (prev=122.0m)  grad=-1352.2%
+  dist=1625m  elev=85.0m (prev=110.9m)  grad=-1024.3%
+  dist=1429m  elev=96.6m (prev=135.5m)  grad=-778.6%
+  dist=1832m  elev=65.1m (prev=103.2m)  grad=-761.8%
+  dist=908m  elev=141.0m (prev=174.6m)  grad=-672.0%
+  dist=1567m  elev=87.9m (prev=121.3m)  grad=-667.3%
+  dist=1657m  elev=79.1m (prev=112.1m)  grad=-660.9%
+  dist=1152m  elev=134.5m (prev=155.2m)  grad=-657.5%
+  dist=894m  elev=168.2m (prev=175.4m)  grad=-640.1%
+  dist=1547m  elev=85.1m (prev=115.0m)  grad=-598.0%
+  dist=1521m  elev=87.6m (prev=115.9m)  grad=-566.6%
+  dist=1817m  elev=78.3m (prev=106.2m)  grad=-557.9%
+  dist=1064m  elev=132.8m (prev=160.4m)  grad=-551.0%
+  dist=1742m  elev=73.4m (prev=100.6m)  grad=-543.9%
+  dist=1461m  elev=100.4m (prev=126.6m)  grad=-524.8%
+  dist=1115m  elev=133.4m (prev=158.9m)  grad=-510.3%
+  dist=1373m  elev=107.7m (prev=131.6m)  grad=-478.1%
+  dist=1995m  elev=69.3m (prev=79.5m)  grad=-465.4%
+  dist=1419m  elev=110.0m (prev=132.5m)  grad=-450.6%

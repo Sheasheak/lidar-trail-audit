@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>NZ MTB Trail Grader — Setup</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:sans-serif;background:#f0f2f5;display:flex;align-items:center;justify-content:center;min-height:100vh;}
+  .card{background:white;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.1);padding:40px;max-width:520px;width:90%;}
+  h1{font-size:22px;margin-bottom:6px;}
+  .sub{color:#666;font-size:13px;margin-bottom:28px;line-height:1.6;}
+  label{display:block;font-weight:600;font-size:13px;margin-bottom:6px;}
+  input[type=text]{width:100%;padding:10px 12px;border:1px solid #ccc;border-radius:6px;font-size:13px;}
+  input[type=text]:focus{outline:none;border-color:#0044cc;}
+  .hint{color:#888;font-size:12px;margin-top:6px;line-height:1.5;}
+  .btn{display:block;width:100%;margin-top:20px;padding:12px;background:#0044cc;color:white;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;}
+  .btn:hover{background:#0033aa;}
+  .error{margin-top:14px;padding:10px 14px;background:#fff0f0;border:1px solid #ffcccc;border-radius:6px;color:#cc0000;font-size:13px;}
+  .step{background:#f8f9fa;border-radius:8px;padding:14px 16px;margin-bottom:16px;font-size:13px;line-height:1.7;}
+  .step b{display:block;margin-bottom:4px;}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>NZ MTB Trail Grader — Setup</h1>
+  <p class="sub">First-time setup. You need to download the Canterbury-Christchurch LiDAR 1m DTM from LINZ and point the app at it.</p>
+
+  <div class="step">
+    <b>Step 1 — Download the DTM</b>
+    Go to <a href="https://data.linz.govt.nz/layer/123193-canterbury-christchurch-lidar-1m-dem-2024-2025/" target="_blank">LINZ Layer 123193</a>,
+    download the full dataset as <b>AAIGrid format</b>, and extract the zip somewhere on your computer.
+  </div>
+
+  <div class="step">
+    <b>Step 2 — Enter the folder path below</b>
+    Paste the path to the folder containing the <code>.asc</code> tile files.
+  </div>
+
+  <form method="post" action="/setup">
+    <label for="dtm">DTM folder path</label>
+    <input type="text" id="dtm" name="dtm_folder"
+           placeholder="e.g. C:\Users\You\Downloads\lds-canterbury-christchurch-lidar-1m-dem-2024-2025-AAIGrid"
+           value="{{ prefill or '' }}" required>
+    <div class="hint">This is the folder that contains files like <code>DEM_BX24_2025_1000_2414.asc</code></div>
+
+    {% if error %}
+    <div class="error">{{ error }}</div>
+    {% endif %}
+
+    <button class="btn" type="submit">Save & Continue</button>
+  </form>
+</div>
+</body>
+</html>

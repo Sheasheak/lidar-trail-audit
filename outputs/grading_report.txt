@@ -1,0 +1,16 @@
+TRAIL GRADING REPORT: Askins MTB (Christchurch)
+Source: LINZ LiDAR 1m DTM (bare earth), 50m smoothing
+
+Total length:     2118 m
+Total descent:    -194.1 m
+Average gradient: -9.2%
+
+OVERALL GRADE: Grade 5 - Expert (Black)
+
+Segment distribution:
+  Grade 1 - Easiest: 170 segments
+  Grade 2 - Easy: 209 segments
+  Grade 3 - Intermediate: 84 segments
+  Grade 4 - Advanced: 8 segments
+  Grade 5 - Expert: 4 segments
+  Grade 6 - Extreme: 0 segments
