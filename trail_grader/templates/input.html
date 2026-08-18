@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LiDAR Trail Audit — set up a run</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='audit.css') }}">
+</head>
+<body>
+<div class="sheet">
+
+  <header class="titleblock">
+    <p class="eyebrow"><span>LiDAR Trail Audit</span><span>Manual grading form</span><a href="{{ url_for('index') }}" style="margin-left:auto">← Trail line editor</a></p>
+    <h1>Grade a trail</h1>
+    <p class="subtitle">
+      Give it a trail line and a stated grade. It samples elevation live from the LINZ
+      raster API along the line, works out gradient and turn radius at every station,
+      and grades the result against the NZ MTB Trail Design &amp; Construction Guidelines.
+    </p>
+    <dl class="fields">
+      <div class="field"><dt>Elevation</dt><dd>LINZ raster API (live)</dd></div>
+      <div class="field"><dt>Standard</dt><dd>Recreation Aotearoa, 2022</dd></div>
+      <div class="field"><dt>Working CRS</dt><dd>NZTM2000 · EPSG:2193</dd></div>
+      <div class="field"><dt>Pipeline</dt><dd>TrailAudit_v11</dd></div>
+    </dl>
+  </header>
+
+  {% if error %}
+  <div class="errorbox" role="alert">
+    <b>That run didn't finish</b>
+    {{ error }}
+  </div>
+  {% endif %}
+
+  <form method="post" action="{{ url_for('audit') }}" enctype="multipart/form-data" id="audit-form">
+
+    <section>
+      <div class="sec-head">
+        <h2>Trail line</h2>
+        <div class="note">Where the trail is</div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <h3>Source</h3>
+          <p class="card-sub">A KML line string — a Trailforks export, a GPS track, or a line drawn in the trail editor.</p>
+          <div class="choice">
+            <label>
+              <input type="radio" name="source" value="sample" checked>
+              <span class="t">Use the bundled Askins line
+                <small>Christchurch Port Hills · the tool's test trail</small></span>
+            </label>
+            <label>
+              <input type="radio" name="source" value="upload">
+              <span class="t">Upload my own KML
+                <small>Must contain a &lt;coordinates&gt; line string, WGS84</small></span>
+            </label>
+          </div>
+          <div class="fieldrow" style="margin-top:14px">
+            <label for="kml">KML file</label>
+            <input type="file" id="kml" name="kml" accept=".kml">
+            <span class="hint">Ignored unless "Upload my own KML" is selected. 10 MB limit.</span>
+          </div>
+          <div class="fieldrow" style="margin-top:14px">
+            <label for="trail_name">Trail name</label>
+            <input type="text" id="trail_name" name="trail_name" placeholder="Askins">
+            <span class="hint">Used as the title on the results page. Defaults to the file name.</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Signposted grade</h3>
+          <p class="card-sub">What the trail is currently marked as on site — used to compare against the measured grade.</p>
+          <div class="fieldrow">
+            <label for="stated_grade">Stated grade</label>
+            <select id="stated_grade" name="stated_grade">
+              <option value="1">Grade 1 — Green (Easiest)</option>
+              <option value="2">Grade 2 — Green (Easy)</option>
+              <option value="3">Grade 3 — Light Blue (Intermediate)</option>
+              <option value="4" selected>Grade 4 — Dark Blue (Advanced)</option>
+              <option value="5">Grade 5 — Black (Expert)</option>
+              <option value="6">Grade 6 — Double Black (Extreme)</option>
+            </select>
+            <span class="hint">Changes the gradient/radius ceilings used in the "% under spec" figures and the mismatch banner.</span>
+          </div>
+          <div class="fieldrow" style="margin-top:14px">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+              <input type="checkbox" name="want_sideslope" value="1" checked style="width:auto;accent-color:var(--accent)">
+              Compute cross-slope (sideslope)
+            </label>
+            <span class="hint">Perpendicular DEM samples either side of the tread. Adds LINZ API calls and run time — uncheck to skip it.</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div style="display:flex;gap:20px;align-items:center;margin-top:32px;flex-wrap:wrap">
+      <button type="submit" class="primary" id="go">Run the audit →</button>
+      <span class="working" id="working"><span class="spinner"></span> Fetching elevations from LINZ live — this can take a minute or two on a first run.</span>
+    </div>
+  </form>
+
+  <footer>
+    <span class="mono">Elevation © LINZ, CC BY 4.0</span>
+    <span class="mono">Thresholds © Recreation Aotearoa 2022</span>
+  </footer>
+</div>
+
+<script>
+(function () {
+  const form = document.getElementById("audit-form");
+  const file = document.getElementById("kml");
+  const radios = form.querySelectorAll('input[name="source"]');
+
+  file.addEventListener("change", () => {
+    if (file.files.length) form.querySelector('input[value="upload"]').checked = true;
+  });
+
+  form.addEventListener("submit", ev => {
+    const upload = form.querySelector('input[name="source"]:checked').value === "upload";
+    if (upload && !file.files.length) {
+      ev.preventDefault();
+      file.focus();
+      alert("Choose a KML file, or switch back to the bundled Askins line.");
+      return;
+    }
+    document.getElementById("go").disabled = true;
+    document.getElementById("working").classList.add("on");
+  });
+})();
+</script>
+</body>
+</html>

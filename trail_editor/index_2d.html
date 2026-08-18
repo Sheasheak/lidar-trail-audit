@@ -76,6 +76,12 @@
     <button id="expGeo" class="sec">Download GeoJSON</button>
     <div class="hint">Feed the exported file back into your grading pipeline to measure the accuracy gain.</div>
   </div>
+
+  <div class="grp">
+    <h2>Finish</h2>
+    <button id="doneBtn">Done — grade this trail →</button>
+    <div class="hint">Sends the corrected line straight to the grader (must be running on <span id="graderHost"></span>).</div>
+  </div>
 </div>
 
 <script src="askins_data.js"></script>
@@ -170,15 +176,48 @@ document.getElementById("expGeo").onclick = () => {
                geometry: { type: "LineString", coordinates: coords } };
   download("trail_corrected.geojson", JSON.stringify(gj, null, 2), "application/geo+json");
 };
-document.getElementById("expKml").onclick = () => {
+function trailToKml() {
   const coordStr = trail.getLatLngs().map(p => p.lng + "," + p.lat + ",0").join(" ");
-  const kml =
-`<?xml version="1.0" encoding="UTF-8"?>
+  return `<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2"><Document>
 <Placemark><name>corrected_trail</name>
 <LineString><tessellate>1</tessellate><coordinates>${coordStr}</coordinates></LineString>
 </Placemark></Document></kml>`;
-  download("trail_corrected.kml", kml, "application/vnd.google-earth.kml+xml");
+}
+document.getElementById("expKml").onclick = () => {
+  download("trail_corrected.kml", trailToKml(), "application/vnd.google-earth.kml+xml");
+};
+
+// ---- hand off to the grader ----
+const GRADER_ORIGIN = "http://127.0.0.1:5000";
+document.getElementById("graderHost").textContent = GRADER_ORIGIN;
+
+document.getElementById("doneBtn").onclick = () => {
+  const kmlFile = new File([trailToKml()], "trail_corrected.kml",
+                           { type: "application/vnd.google-earth.kml+xml" });
+  const dt = new DataTransfer();
+  dt.items.add(kmlFile);
+
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = GRADER_ORIGIN + "/audit";
+  form.enctype = "multipart/form-data";
+  form.style.display = "none";
+
+  const fileInput = document.createElement("input");
+  fileInput.type = "file"; fileInput.name = "kml";
+  fileInput.files = dt.files;
+  form.appendChild(fileInput);
+
+  const fields = { source: "upload", trail_name: "Corrected trail", direction: "descending" };
+  for (const [name, value] of Object.entries(fields)) {
+    const input = document.createElement("input");
+    input.type = "hidden"; input.name = name; input.value = value;
+    form.appendChild(input);
+  }
+
+  document.body.appendChild(form);
+  form.submit();
 };
 </script>
 </body>

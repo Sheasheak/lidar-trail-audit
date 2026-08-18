@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LiDAR Trail Audit Tool</title>
+<style>
+  body { font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 0 20px 60px; max-width: 900px; margin-left: auto; margin-right: auto; line-height: 1.5; color: #222; }
+  h1 { margin-top: 40px; }
+  h2 { margin-top: 40px; border-bottom: 1px solid #ccc; padding-bottom: 6px; }
+  h3 { margin-top: 24px; }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; }
+  th, td { border: 1px solid #ccc; padding: 8px 10px; text-align: left; }
+  th { background: #f2f2f2; }
+  code { background: #f2f2f2; padding: 1px 5px; border-radius: 3px; }
+  ul { padding-left: 22px; }
+  .tag { display: inline-block; background: #eee; border-radius: 4px; padding: 2px 8px; margin: 2px 4px 2px 0; font-size: 13px; }
+  .status { margin: 20px 0; }
+  .status li { margin-bottom: 4px; }
+  footer { margin-top: 60px; color: #666; font-size: 13px; border-top: 1px solid #ccc; padding-top: 12px; }
+</style>
+</head>
+<body>
+
+<h1>LiDAR Trail Audit Tool</h1>
+<p>
+  Automated mountain-bike trail grading from LiDAR elevation data, assessed against the
+  <b>NZ MTB Trail Design &amp; Construction Guidelines</b> (Recreation Aotearoa, 2022).
+  Give it a trail line and it works out how hard the trail actually is — no stopwatch,
+  no guesswork, no arguing about whether it's "really" a Blue or a Black.
+</p>
+<p>
+  Test trail: <b>Askins</b>, Christchurch Port Hills — downhill only, Blue grade, 2116&nbsp;m long, 192&nbsp;m descent.
+</p>
+
+<h2>What it does</h2>
+<p>
+  You give it a trail line (a KML export from Trailforks, a GPS track, or one drawn in the
+  bundled trail editor). It samples 1&nbsp;m bare-earth LiDAR elevation data along that line and
+  computes, at every station:
+</p>
+<ul>
+  <li><b>Gradient</b> — smoothed over a moving window, with an "exceptions" allowance for short steep pinches</li>
+  <li><b>Turn radius</b> — fitted through each point on the line to catch tight switchbacks</li>
+  <li><b>Cross-slope</b> — perpendicular transects off the DEM, how steeply the hill falls away across the tread</li>
+  <li><b>Exposure</b> — 90th-percentile fall height alongside the trail</li>
+  <li><b>Annual rainfall</b> — 5-year average, as a proxy for surface durability</li>
+</ul>
+<p>
+  Each of those gets graded against the Recreation Aotearoa thresholds below, and the trail's
+  overall grade is the worst of them. A short field questionnaire (tread obstacles, trail
+  surface, technical features) fills in the parts LiDAR can't see, and the result is shown as an
+  interactive map and a 3D terrain view with the trail line draped over it.
+</p>
+
+<h2>How it works — the pipeline</h2>
+<ol>
+  <li>Trail line (KML) → list of (lon, lat) points in WGS84</li>
+  <li>Reproject WGS84 → NZTM2000 (EPSG:2193) so distances are in metres</li>
+  <li>Interpolate to a fixed spacing along the line</li>
+  <li>Sample elevation from local LINZ 1&nbsp;m LiDAR DEM tiles</li>
+  <li>Compute gradient between consecutive points, smoothed over a window</li>
+  <li>Compute turn radius via the circumradius of point triples</li>
+  <li>Compute cross-slope from perpendicular transects, and exposure/rainfall from surrounding terrain</li>
+  <li>Grade every measurement against the Recreation Aotearoa thresholds</li>
+  <li>Render an interactive map, gradient profile, and 3D terrain view</li>
+</ol>
+
+<h2>Grading thresholds (descending trails)</h2>
+<table>
+  <tr><th>Grade</th><th>Avg gradient max</th><th>Max gradient</th><th>Exception %</th><th>Min turn radius</th></tr>
+  <tr><td>1</td><td>3.5° (6.1%)</td><td>4° (7.0%)</td><td>2%</td><td>6 m ± 1 m</td></tr>
+  <tr><td>2</td><td>5° (8.8%)</td><td>8° (14.1%)</td><td>5%</td><td>4 m</td></tr>
+  <tr><td>3</td><td>6° (10.5%)</td><td>11° (19.3%)</td><td>10%</td><td>2.5 m</td></tr>
+  <tr><td>4</td><td>10° (17.5%)</td><td>15° (27.0%)</td><td>20%</td><td>2 m</td></tr>
+  <tr><td>5</td><td>14° (24.9%)</td><td>20° (36.0%)</td><td>20%</td><td>1.5 m</td></tr>
+  <tr><td>6</td><td>no target</td><td>no target</td><td>no target</td><td>1 m</td></tr>
+</table>
+<p>Overall grade = the worse of the gradient grade and the turn-radius grade.</p>
+
+<h2>Using it</h2>
+<h3>1. Set up</h3>
+<p>
+  On first run it asks for a folder of local <code>.asc</code> LiDAR DEM tiles (downloaded from
+  LINZ Data Service, covering the area of the trail). Point it at that folder once and it's
+  remembered.
+</p>
+<h3>2. Grade a trail</h3>
+<p>
+  Use the bundled Askins test line, or upload your own KML. Choose whether the trail is
+  descending or climbing/two-way (this changes which gradient ceiling applies), and optionally
+  tune the sampling settings:
+</p>
+<ul>
+  <li>Station spacing — how densely the line is walked</li>
+  <li>Gradient window — how far the moving average runs</li>
+  <li>Turn-radius chord — the arc length fitted through each point</li>
+  <li>Cross-slope offset — how far either side of the tread the transect samples</li>
+  <li>Terrain margin / grid resolution — controls the 3D surface drawn under the trail</li>
+</ul>
+<h3>3. Read the result</h3>
+<p>
+  An interactive map colours the trail by gradient grade and marks tight corners, with a stats
+  panel showing every measurement and its grade side by side. A field questionnaire (obstacles,
+  surface, technical features) combines with the LiDAR-derived grade to give the final overall
+  grade. There's also a full 3D terrain view with the trail line draped over the DEM.
+</p>
+
+<h2>Coordinate systems</h2>
+<table>
+  <tr><th>System</th><th>Used for</th></tr>
+  <tr><td>EPSG:4326 (WGS84)</td><td>GPS lon/lat — KML input, the map display</td></tr>
+  <tr><td>EPSG:2193 (NZTM2000)</td><td>Metres — all distance, gradient, and radius maths</td></tr>
+</table>
+
+<h2>Project status</h2>
+<ul class="status">
+  <li>✅ Phase 1 — Working pipeline (gradient + turn radius grading)</li>
+  <li>🔨 Phase 2 — Accurate trail-line extraction; QGIS hand-edit workspace built</li>
+  <li>Phase 3 — Feature detection (jumps, drops, berms, rock gardens)</li>
+  <li>Phase 4 — Full metrics (sideslope, tread width, obstacles)</li>
+  <li>Phase 5 — Polish and write-up</li>
+  <li>Phase 6 — Web app</li>
+</ul>
+<p>
+  <span class="tag">Python 3.13</span>
+  <span class="tag">Flask</span>
+  <span class="tag">Leaflet</span>
+  <span class="tag">Plotly</span>
+  <span class="tag">LINZ LiDAR</span>
+  <span class="tag">Recreation Aotearoa 2022</span>
+</p>
+<p>Entered in the Prime Minister's Space Prize for Student Endeavour 2026.</p>
+
+<footer>
+  Elevation data © LINZ, CC BY 4.0 &nbsp;·&nbsp; Grading thresholds © Recreation Aotearoa 2022
+</footer>
+
+</body>
+</html>

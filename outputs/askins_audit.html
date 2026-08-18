@@ -1,0 +1,1231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Askins — LiDAR Trail Audit</title>
+<style>
+  :root {
+    color-scheme: light;
+    --plane:      #eceee9;
+    --surface:    #f9faf7;
+    --surface-2:  #f2f4ef;
+    --ink:        #101410;
+    --ink-2:      #4d534a;
+    --ink-3:      #7f857a;
+    --grid:       #dfe2da;
+    --rule:       #c8ccc0;
+    --hairline:   rgba(16,20,16,0.10);
+    --accent:     #1c5cab;
+    --critical:   #b3302f;
+    --cmp-a:      #2a78d6;
+    --cmp-b:      #c4501f;
+    --g1: #86b6ef; --g2: #5598e7; --g3: #2a78d6;
+    --g4: #1c5cab; --g5: #104281; --g6: #082a56;
+    --grade-ink: #f9faf7;
+
+    --font-display: "Bahnschrift", "DIN Alternate", "Arial Narrow", "Helvetica Neue", system-ui, sans-serif;
+    --font-body: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", sans-serif;
+    --font-mono: "Cascadia Mono", "Cascadia Code", ui-monospace, "SF Mono", Consolas, "Liberation Mono", monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --plane:      #0b0d0a;
+      --surface:    #161915;
+      --surface-2:  #1d211b;
+      --ink:        #f0f2ec;
+      --ink-2:      #b3b9ac;
+      --ink-3:      #82887c;
+      --grid:       #272b23;
+      --rule:       #363b31;
+      --hairline:   rgba(240,242,236,0.12);
+      --accent:     #7fb0f0;
+      --critical:   #e07a79;
+      --cmp-a:      #3987e5;
+      --cmp-b:      #e07a4a;
+      --g1: #184f95; --g2: #256abf; --g3: #3987e5;
+      --g4: #6da7ec; --g5: #9ec5f4; --g6: #cde2fb;
+      --grade-ink: #0b0d0a;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --plane:      #0b0d0a;
+    --surface:    #161915;
+    --surface-2:  #1d211b;
+    --ink:        #f0f2ec;
+    --ink-2:      #b3b9ac;
+    --ink-3:      #82887c;
+    --grid:       #272b23;
+    --rule:       #363b31;
+    --hairline:   rgba(240,242,236,0.12);
+    --accent:     #7fb0f0;
+    --critical:   #e07a79;
+    --cmp-a:      #3987e5;
+    --cmp-b:      #e07a4a;
+    --g1: #184f95; --g2: #256abf; --g3: #3987e5;
+    --g4: #6da7ec; --g5: #9ec5f4; --g6: #cde2fb;
+    --grade-ink: #0b0d0a;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--plane);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .sheet {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 20px 96px;
+  }
+
+  /* ---------- title block ---------- */
+
+  .titleblock {
+    border-bottom: 2px solid var(--ink);
+    padding: 40px 0 0;
+  }
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 0 0 14px;
+  }
+  .titleblock h1 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: clamp(48px, 9vw, 92px);
+    line-height: 0.92;
+    letter-spacing: -0.015em;
+    margin: 0 0 6px;
+    text-wrap: balance;
+  }
+  .subtitle {
+    font-size: 17px;
+    color: var(--ink-2);
+    margin: 0 0 26px;
+    max-width: 62ch;
+  }
+  .fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 0;
+    border-top: 1px solid var(--rule);
+  }
+  .field {
+    padding: 12px 16px 14px 0;
+    border-right: 1px solid var(--rule);
+  }
+  .field:last-child { border-right: 0; }
+  .field dt {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin-bottom: 3px;
+  }
+  .field dd {
+    margin: 0;
+    font-size: 14px;
+    color: var(--ink);
+  }
+
+  /* ---------- section scaffolding ---------- */
+
+  section { margin-top: 64px; }
+  .sec-head {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    border-bottom: 1px solid var(--ink);
+    padding-bottom: 8px;
+    margin-bottom: 28px;
+  }
+  .sec-head h2 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 26px;
+    letter-spacing: 0.01em;
+    margin: 0;
+    text-transform: uppercase;
+  }
+  .sec-head .note {
+    font-size: 13px;
+    color: var(--ink-3);
+    margin-left: auto;
+    text-align: right;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    padding: 22px 24px 24px;
+  }
+  .card > h3 {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    font-weight: 600;
+    margin: 0 0 4px;
+  }
+  .card > .card-sub {
+    font-size: 13px;
+    color: var(--ink-2);
+    margin: 0 0 20px;
+    max-width: 68ch;
+  }
+
+  .grid-2 {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 20px;
+  }
+
+  /* ---------- verdict ---------- */
+
+  .verdict {
+    display: grid;
+    grid-template-columns: minmax(210px, 260px) 1fr;
+    gap: 0;
+    border: 1px solid var(--hairline);
+    background: var(--surface);
+    margin-top: 40px;
+  }
+  .verdict-badge {
+    background: var(--g3);
+    color: var(--grade-ink);
+    padding: 26px 24px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .verdict-badge .lbl {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    opacity: 0.85;
+  }
+  .verdict-badge .num {
+    font-family: var(--font-display);
+    font-size: 74px;
+    line-height: 0.9;
+    font-weight: 600;
+    margin: 6px 0 2px;
+  }
+  .verdict-badge .nm {
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+  }
+  .verdict-body {
+    padding: 24px 26px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .verdict-body p { margin: 0; max-width: 66ch; color: var(--ink-2); }
+  .verdict-body strong { color: var(--ink); font-weight: 600; }
+  .checkrow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 20px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-2);
+    padding-top: 12px;
+    border-top: 1px solid var(--grid);
+  }
+  .checkrow span::before {
+    content: "✓ ";
+    color: var(--accent);
+    font-weight: 700;
+  }
+
+  /* ---------- stat tiles ---------- */
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+    gap: 1px;
+    background: var(--hairline);
+    border: 1px solid var(--hairline);
+    margin-top: 20px;
+  }
+  .stat {
+    background: var(--surface);
+    padding: 16px 18px 18px;
+  }
+  .stat dt {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin-bottom: 6px;
+  }
+  .stat dd {
+    margin: 0;
+    font-size: 30px;
+    line-height: 1.05;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .stat dd .u {
+    font-size: 15px;
+    font-weight: 400;
+    color: var(--ink-2);
+    margin-left: 2px;
+  }
+  .stat .sub {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-3);
+    margin-top: 5px;
+  }
+
+  /* ---------- inputs ---------- */
+
+  .spec { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .spec th, .spec td {
+    text-align: left;
+    padding: 9px 12px 9px 0;
+    border-bottom: 1px solid var(--grid);
+    vertical-align: top;
+  }
+  .spec th {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    font-weight: 600;
+    white-space: nowrap;
+    width: 40%;
+  }
+  .spec td { color: var(--ink); }
+  .spec code, .mono { font-family: var(--font-mono); font-size: 12.5px; }
+  .spec .hint { display: block; color: var(--ink-3); font-size: 12px; margin-top: 2px; }
+
+  .pipeline { list-style: none; margin: 0; padding: 0; counter-reset: step; }
+  .pipeline li {
+    counter-increment: step;
+    display: grid;
+    grid-template-columns: 30px 1fr;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--grid);
+    font-size: 14px;
+  }
+  .pipeline li:last-child { border-bottom: 0; }
+  .pipeline li::before {
+    content: counter(step, decimal-leading-zero);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-3);
+    padding-top: 3px;
+  }
+  .pipeline li span { color: var(--ink-3); font-size: 12.5px; display: block; }
+
+  .thresh { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .thresh th, .thresh td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--grid);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .thresh th:first-child, .thresh td:first-child { text-align: left; }
+  .thresh thead th {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    font-weight: 600;
+    border-bottom: 1px solid var(--rule);
+  }
+  .thresh tbody tr.hit { background: var(--surface-2); }
+  .thresh tbody tr.hit td:first-child { font-weight: 600; }
+  .swatch {
+    display: inline-block;
+    width: 10px; height: 10px;
+    margin-right: 8px;
+    vertical-align: baseline;
+    border-radius: 2px;
+  }
+
+  /* ---------- charts ---------- */
+
+  .chart-scroll { overflow-x: auto; position: relative; }
+  .chart-scroll svg { display: block; min-width: 700px; width: 100%; height: auto; }
+  #plan-scroll svg { min-width: 560px; }
+
+  .tick { font-family: var(--font-mono); font-size: 10px; fill: var(--ink-3); }
+  .axlabel {
+    font-family: var(--font-mono); font-size: 10px; fill: var(--ink-3);
+    letter-spacing: 0.1em; text-transform: uppercase;
+  }
+  .gridline { stroke: var(--grid); stroke-width: 1; }
+  .baseline { stroke: var(--rule); stroke-width: 1; }
+  .marklabel { font-family: var(--font-body); font-size: 11px; fill: var(--ink-2); }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+    margin-top: 16px;
+    font-size: 12.5px;
+    color: var(--ink-2);
+    align-items: center;
+  }
+  .legend .key { display: inline-flex; align-items: center; gap: 7px; }
+  .legend .key i {
+    width: 12px; height: 12px; border-radius: 2px; display: inline-block;
+  }
+  .legend .key .n { font-variant-numeric: tabular-nums; color: var(--ink-3); font-family: var(--font-mono); font-size: 11px; }
+
+  .tip {
+    position: absolute;
+    pointer-events: none;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    box-shadow: 0 4px 14px rgba(0,0,0,0.13);
+    padding: 9px 12px;
+    font-size: 12px;
+    line-height: 1.5;
+    min-width: 150px;
+    opacity: 0;
+    transition: opacity 0.1s;
+    z-index: 5;
+  }
+  .tip.on { opacity: 1; }
+  .tip .th {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin-bottom: 5px;
+  }
+  .tip .row { display: flex; justify-content: space-between; gap: 20px; }
+  .tip .row b { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .tip .gpill {
+    display: inline-block; margin-top: 6px; padding: 1px 8px;
+    font-size: 11px; font-weight: 600; border-radius: 2px; color: var(--grade-ink);
+  }
+
+  /* ---------- distribution bars ---------- */
+
+  .dist { display: flex; flex-direction: column; gap: 2px; }
+  .dist-row {
+    display: grid;
+    grid-template-columns: 132px 1fr 92px;
+    align-items: center;
+    gap: 14px;
+    padding: 5px 0;
+  }
+  .dist-row .nm { font-size: 13px; display: flex; align-items: center; }
+  .dist-track { height: 16px; background: var(--surface-2); position: relative; }
+  .dist-fill { height: 100%; }
+  .dist-row .val {
+    font-family: var(--font-mono); font-size: 12px;
+    text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-2);
+  }
+
+  /* ---------- flags ---------- */
+
+  .flags { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .flags th, .flags td {
+    padding: 9px 12px 9px 0;
+    border-bottom: 1px solid var(--grid);
+    text-align: left;
+    font-variant-numeric: tabular-nums;
+  }
+  .flags thead th {
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--ink-3); font-weight: 600;
+    border-bottom: 1px solid var(--rule);
+  }
+  .pill {
+    display: inline-block; padding: 1px 8px; border-radius: 2px;
+    font-size: 11px; font-weight: 600; color: var(--grade-ink);
+    font-family: var(--font-body);
+  }
+  .cause { color: var(--ink-2); }
+
+  /* ---------- table view ---------- */
+
+  details.tableview { margin-top: 18px; border-top: 1px solid var(--grid); padding-top: 12px; }
+  details.tableview summary {
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-2);
+    list-style: none;
+  }
+  details.tableview summary::-webkit-details-marker { display: none; }
+  details.tableview summary::before { content: "▸ "; color: var(--ink-3); }
+  details.tableview[open] summary::before { content: "▾ "; }
+  .tablewrap { max-height: 340px; overflow: auto; margin-top: 12px; border: 1px solid var(--grid); }
+  .tablewrap table { width: 100%; border-collapse: collapse; font-size: 12px; font-family: var(--font-mono); }
+  .tablewrap th, .tablewrap td {
+    padding: 5px 10px; text-align: right; font-variant-numeric: tabular-nums;
+    border-bottom: 1px solid var(--grid); white-space: nowrap;
+  }
+  .tablewrap th {
+    position: sticky; top: 0; background: var(--surface);
+    font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--ink-3); text-align: right; z-index: 1;
+  }
+
+  /* ---------- manifest ---------- */
+
+  .manifest { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .manifest td {
+    padding: 8px 14px 8px 0; border-bottom: 1px solid var(--grid); vertical-align: top;
+  }
+  .manifest td:first-child { font-family: var(--font-mono); font-size: 12px; white-space: nowrap; }
+  .manifest td:last-child { color: var(--ink-2); }
+
+  footer {
+    margin-top: 56px;
+    padding-top: 20px;
+    border-top: 1px solid var(--rule);
+    font-size: 12.5px;
+    color: var(--ink-3);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 28px;
+  }
+  footer .mono { font-size: 11.5px; }
+
+  a { color: var(--accent); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+  @media (max-width: 620px) {
+    .verdict { grid-template-columns: 1fr; }
+    .dist-row { grid-template-columns: 108px 1fr 78px; gap: 10px; }
+    .field { border-right: 0; border-bottom: 1px solid var(--grid); }
+  }
+
+html, body { margin: 0; padding: 0; }
+img, svg { max-width: 100%; }
+</style>
+</head>
+<body>
+
+
+<div class="sheet">
+
+  <header class="titleblock">
+    <p class="eyebrow">LiDAR Trail Audit · Sheet 01</p>
+    <h1>Askins</h1>
+    <p class="subtitle">
+      A 2.1&nbsp;km descending mountain-bike trail in the Christchurch Port Hills, graded
+      against the NZ MTB Trail Design &amp; Construction Guidelines from LINZ 1&nbsp;m
+      bare-earth LiDAR. Everything below is either what went into the audit, or what came out of it.
+    </p>
+    <dl class="fields">
+      <div class="field"><dt>Trail</dt><dd>Askins · Trailforks 225719</dd></div>
+      <div class="field"><dt>Location</dt><dd>Port Hills, Christchurch</dd></div>
+      <div class="field"><dt>Direction</dt><dd>Descending only</dd></div>
+      <div class="field"><dt>Signposted</dt><dd>Blue — Grade 3</dd></div>
+      <div class="field"><dt>Audited</dt><dd id="f-date">—</dd></div>
+    </dl>
+  </header>
+
+  <div class="verdict">
+    <div class="verdict-badge" id="verdict-badge">
+      <div class="lbl">Assessed grade</div>
+      <div class="num" id="v-num">—</div>
+      <div class="nm" id="v-name">—</div>
+    </div>
+    <div class="verdict-body">
+      <p id="v-lede">—</p>
+      <p id="v-detail">—</p>
+      <div class="checkrow" id="v-checks"></div>
+    </div>
+  </div>
+
+  <dl class="stats" id="stats"></dl>
+
+  <!-- ============ INPUTS ============ -->
+  <section id="inputs">
+    <div class="sec-head">
+      <h2>Inputs</h2>
+      <div class="note">What the audit was run on</div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <h3>Sources</h3>
+        <p class="card-sub">Two data sources: a GPS trace of where the trail is, and a LiDAR surface of what the ground does there.</p>
+        <table class="spec">
+          <tr>
+            <th scope="row">Trail line</th>
+            <td><code>data/askins.kml</code>
+              <span class="hint">112 GPS vertices exported from Trailforks, WGS84</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Elevation</th>
+            <td>LINZ LiDAR 1&nbsp;m DEM — layer <code>121859</code>
+              <span class="hint">Bare-earth national amalgamation; Canterbury tile flown 2024–25</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Access</th>
+            <td>LINZ Raster Query API, threaded
+              <span class="hint">Point queries at each station, cached by line hash</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Local raster</th>
+            <td><code>data/askins_dem.tif</code>
+              <span class="hint">960 × 720 merged DEM, EPSG:2193 — used for the editor overlays</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Standard</th>
+            <td>NZ MTB Trail Design &amp; Construction Guidelines
+              <span class="hint">Recreation Aotearoa, 2022 — descending trail thresholds</span></td>
+          </tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3>Parameters</h3>
+        <p class="card-sub">The settings that turn a line and a surface into a grade. Change any one of these and the result moves.</p>
+        <table class="spec">
+          <tr><th scope="row">Working CRS</th><td>NZTM2000 (EPSG:2193) <span class="hint">Metric — all distances, gradients and radii computed here</span></td></tr>
+          <tr><th scope="row">Resample spacing</th><td>1&nbsp;m along the line <span class="hint">Reported at every 5th station below</span></td></tr>
+          <tr><th scope="row">Gradient window</th><td>50&nbsp;m moving average <span class="hint">First and last 25&nbsp;m excluded from statistics — the window is only part-filled there</span></td></tr>
+          <tr><th scope="row">Turn radius</th><td>Circumradius, 5&nbsp;m chord <span class="hint">Straights return infinity and are excluded from the radius test</span></td></tr>
+          <tr><th scope="row">Radius cutoff</th><td>500&nbsp;m <span class="hint">Anything above this counts as straight</span></td></tr>
+          <tr><th scope="row">Grading rule</th><td>Worst of gradient and radius <span class="hint">Both a strict and an exception-aware pass are reported</span></td></tr>
+        </table>
+      </div>
+    </div>
+
+    <div class="grid-2" style="margin-top:20px">
+      <div class="card">
+        <h3>Pipeline</h3>
+        <p class="card-sub">Each step's output is the next step's input.</p>
+        <ol class="pipeline">
+          <li>Read the KML into lon/lat pairs<span>pykml → 112 vertices</span></li>
+          <li>Reproject WGS84 → NZTM2000<span>pyproj, always_xy — metres from here on</span></li>
+          <li>Resample the line to even spacing<span>shapely interpolate → 2 118 stations</span></li>
+          <li>Query ground elevation per station<span>LINZ raster API, 10 threads; nulls dropped</span></li>
+          <li>Differentiate and smooth<span>rise over run, 50 m moving average</span></li>
+          <li>Fit turn radius through point triples<span>circumradius; collinear → straight</span></li>
+          <li>Test each station against the thresholds<span>gradient grade and radius grade, worst wins</span></li>
+          <li>Roll up to a trail grade<span>strict worst-case, then with exception allowances</span></li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3>Grading thresholds — descending trails</h3>
+        <p class="card-sub">Recreation Aotearoa, 2022. A grade allows a share of its length to break the maximum — that allowance is the exception column.</p>
+        <div class="chart-scroll">
+          <table class="thresh" id="thresh-table">
+            <thead>
+              <tr>
+                <th scope="col">Grade</th>
+                <th scope="col">Avg max</th>
+                <th scope="col">Peak max</th>
+                <th scope="col">Exception</th>
+                <th scope="col">Min radius</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ OUTPUTS ============ -->
+  <section id="outputs">
+    <div class="sec-head">
+      <h2>Outputs</h2>
+      <div class="note">Hover the profile or the map — they move together</div>
+    </div>
+
+    <div class="card">
+      <h3>Plan view — graded by station</h3>
+      <p class="card-sub">The trail as flown, in NZTM metres, with each 5&nbsp;m station shaded by the grade it earns. The switchback cluster at mid-trail is where the tight radii sit; the steep work is the straight upper third.</p>
+      <div class="chart-scroll" id="plan-scroll">
+        <svg id="plan" viewBox="0 0 1000 470" role="img" aria-labelledby="plan-title">
+          <title id="plan-title">Plan view of the Askins trail, each station coloured by assessed grade</title>
+        </svg>
+        <div class="tip" id="plan-tip" role="status" aria-live="polite"></div>
+      </div>
+      <div class="legend" id="grade-legend"></div>
+    </div>
+
+    <div class="card" style="margin-top:20px">
+      <h3>Long section</h3>
+      <p class="card-sub">Ground elevation and the 50&nbsp;m smoothed gradient, on a shared distance axis. Descent is plotted below the zero line; the pale skirts at each end are the part-filled smoothing window, excluded from all statistics.</p>
+      <div class="chart-scroll" id="profile-scroll">
+        <svg id="profile" viewBox="0 0 1000 420" role="img" aria-labelledby="profile-title" tabindex="0" aria-describedby="profile-help">
+          <title id="profile-title">Elevation and gradient of the Askins trail against distance</title>
+        </svg>
+        <div class="tip" id="profile-tip" role="status" aria-live="polite"></div>
+      </div>
+      <p id="profile-help" class="mono" style="color:var(--ink-3);font-size:11px;margin:10px 0 0">
+        Focus the chart and use ← → to step stations, Home / End to jump to the ends.
+      </p>
+      <details class="tableview">
+        <summary>Station table — every value plotted above</summary>
+        <div class="tablewrap">
+          <table id="station-table">
+            <thead><tr>
+              <th scope="col">Chainage m</th><th scope="col">Elev m</th><th scope="col">Gradient %</th>
+              <th scope="col">Radius m</th><th scope="col">Grade</th><th scope="col">Window</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </details>
+    </div>
+
+    <div class="grid-2" style="margin-top:20px">
+      <div class="card">
+        <h3>Grade distribution by length</h3>
+        <p class="card-sub">How much of the trail earns each grade, strict worst-of-two per station.</p>
+        <div class="dist" id="dist"></div>
+      </div>
+
+      <div class="card">
+        <h3>Sections above the signposted grade</h3>
+        <p class="card-sub">Runs of consecutive stations assessed harder than Grade&nbsp;3 — the places a builder would go and look.</p>
+        <div class="chart-scroll">
+          <table class="flags" id="flags">
+            <thead><tr>
+              <th scope="col">Chainage</th><th scope="col">Length</th>
+              <th scope="col">Grade</th><th scope="col">Driven by</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p class="mono" id="flags-note" style="color:var(--ink-3);font-size:11px;margin:14px 0 0"></p>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:20px">
+      <h3>Why LiDAR — GPS elevation vs bare-earth ground</h3>
+      <p class="card-sub">The same line, elevation from two sources. The handheld GPS trace sits systematically high and noisy; the LiDAR surface is the ground. Grading off the GPS heights called 31% of the trail steep — the LiDAR says 16%.</p>
+      <div class="chart-scroll" id="cmp-scroll">
+        <svg id="cmp" viewBox="0 0 1000 260" role="img" aria-labelledby="cmp-title">
+          <title id="cmp-title">Elevation from GPS compared with LiDAR bare-earth elevation along the trail</title>
+        </svg>
+      </div>
+      <div class="legend">
+        <span class="key"><i style="background:var(--cmp-b)"></i> GPS elevation, from the KML</span>
+        <span class="key"><i style="background:var(--cmp-a)"></i> LiDAR bare-earth ground</span>
+        <span class="key n" id="cmp-bias"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ FILES ============ -->
+  <section id="files">
+    <div class="sec-head">
+      <h2>Generated</h2>
+      <div class="note">Paths relative to the repository root</div>
+    </div>
+    <div class="card">
+      <h3>Artefacts this audit produced</h3>
+      <p class="card-sub">Written by the notebook alongside this sheet. Paths, not links — open them from the repo.</p>
+      <table class="manifest">
+        <tr><td>outputs/askins_dtm_gradient.csv</td><td>Per-station chainage, elevation, gradient and NZTM coordinates — the table this page is built from</td></tr>
+        <tr><td>outputs/askins_gradient_kml.csv</td><td>The same stations with GPS elevations, for the comparison above</td></tr>
+        <tr><td>outputs/grading_report.txt</td><td>Text summary of the grade roll-up</td></tr>
+        <tr><td>outputs/gradient_summary_dtm.txt</td><td>Gradient statistics and band distribution</td></tr>
+        <tr><td>outputs/askins_full_grade_map.html</td><td>Folium slippy map, trail coloured by grade</td></tr>
+        <tr><td>outputs/askins_3d.html</td><td>Plotly 3D terrain with the trail draped and coloured by gradient</td></tr>
+        <tr><td>outputs/Askins_gradient_profile.png</td><td>Matplotlib long section</td></tr>
+        <tr><td>outputs/Askins_sideslope_profile.png</td><td>Matplotlib sideslope profile</td></tr>
+        <tr><td>trail_editor/index.html</td><td>Browser trail-line editor — correct the line, re-export, re-run</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    <span class="mono">LiDAR Trail Audit · Askins sheet</span>
+    <span class="mono">Elevation © LINZ, CC BY 4.0 · Trail line © Trailforks</span>
+    <span class="mono">Thresholds © Recreation Aotearoa 2022</span>
+  </footer>
+</div>
+
+<script>
+const DATA = {"trail":{"name":"Askins","trailforks_id":225719,"region":"Christchurch Port Hills, NZ","direction":"Downhill only","signposted":"Blue (Grade 3)"},"summary":{"length_m":2118,"stations":476,"spacing_m":5,"start_z":232.8,"end_z":38.7,"descent_m":194.1,"avg_gradient_pct":-9.1,"max_descent_pct":-27.2,"max_descent_at_m":25,"max_ascent_pct":13.5,"max_ascent_at_m":1027,"min_radius_m":2.5,"min_radius_at_m":604,"median_radius_m":7.7,"overall_grade":5,"core_stations":464,"grade_distribution":{"1":168,"2":186,"3":101,"4":8,"5":1,"6":0},"gradient_bands":{"flat":0.21767241379310345,"moderate":0.625,"steep":0.15732758620689655,"very_steep":0.0,"uphill":0.040948275862068964}},"grades":[{"n":1,"name":"Easiest","avg_deg":3.5,"max_deg":4.0,"exc":2,"radius":6.0},{"n":2,"name":"Easy","avg_deg":5.0,"max_deg":8.0,"exc":5,"radius":4.0},{"n":3,"name":"Intermediate","avg_deg":6.0,"max_deg":11.0,"exc":10,"radius":2.5},{"n":4,"name":"Advanced","avg_deg":10.0,"max_deg":15.0,"exc":20,"radius":2.0},{"n":5,"name":"Expert","avg_deg":14.0,"max_deg":20.0,"exc":20,"radius":1.5},{"n":6,"name":"Extreme","avg_deg":null,"max_deg":null,"exc":null,"radius":1.0}],"stations":[{"d":0,"z":232.8,"g":-33.3,"r":null,"grade":5,"gg":5,"rg":1,"e":1,"x":1570984.6,"y":5173007.5},{"d":5,"z":230.5,"g":-29.8,"r":null,"grade":5,"gg":5,"rg":1,"e":1,"x":1570984.7,"y":5173012.5},{"d":10,"z":229.5,"g":-30.1,"r":null,"grade":5,"gg":5,"rg":1,"e":1,"x":1570984.8,"y":5173017.5},{"d":15,"z":228.0,"g":-29.0,"r":null,"grade":5,"gg":5,"rg":1,"e":1,"x":1570984.8,"y":5173022.5},{"d":20,"z":226.1,"g":-26.9,"r":null,"grade":5,"gg":5,"rg":1,"e":1,"x":1570984.9,"y":5173027.5},{"d":25,"z":224.4,"g":-27.2,"r":null,"grade":5,"gg":5,"rg":1,"e":0,"x":1570985.0,"y":5173032.5},{"d":30,"z":223.8,"g":-25.1,"r":null,"grade":4,"gg":4,"rg":1,"e":0,"x":1570985.0,"y":5173037.5},{"d":35,"z":222.2,"g":-26.5,"r":null,"grade":4,"gg":4,"rg":1,"e":0,"x":1570985.1,"y":5173042.5},{"d":40,"z":221.2,"g":-23.6,"r":null,"grade":4,"gg":4,"rg":1,"e":0,"x":1570985.2,"y":5173047.5},{"d":45,"z":220.6,"g":-20.1,"r":null,"grade":4,"gg":4,"rg":1,"e":0,"x":1570985.2,"y":5173052.5},{"d":47,"z":220.1,"g":-20.1,"r":12.1,"grade":4,"gg":4,"rg":1,"e":0,"x":1570985.3,"y":5173054.1},{"d":52,"z":218.7,"g":-17.6,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570984.0,"y":5173059.0},{"d":57,"z":217.6,"g":-15.3,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570982.7,"y":5173063.8},{"d":62,"z":215.8,"g":-11.0,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570981.4,"y":5173068.6},{"d":67,"z":215.8,"g":-6.8,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570980.1,"y":5173073.5},{"d":72,"z":215.7,"g":-6.1,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570978.8,"y":5173078.3},{"d":72,"z":215.7,"g":-6.1,"r":20.6,"grade":1,"gg":1,"rg":1,"e":0,"x":1570978.7,"y":5173078.5},{"d":77,"z":215.3,"g":-2.3,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570976.8,"y":5173083.2},{"d":82,"z":215.9,"g":-0.9,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570974.9,"y":5173087.8},{"d":87,"z":216.5,"g":2.9,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570973.0,"y":5173092.4},{"d":92,"z":217.6,"g":1.3,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570971.1,"y":5173097.0},{"d":97,"z":217.1,"g":1.8,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570969.2,"y":5173101.7},{"d":102,"z":217.5,"g":1.3,"r":23.2,"grade":1,"gg":1,"rg":1,"e":0,"x":1570967.3,"y":5173106.3},{"d":107,"z":217.1,"g":-2.5,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570964.4,"y":5173110.4},{"d":112,"z":217.3,"g":-4.9,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570961.6,"y":5173114.5},{"d":117,"z":216.5,"g":-7.5,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570958.7,"y":5173118.6},{"d":122,"z":216.6,"g":-5.9,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570955.9,"y":5173122.7},{"d":126,"z":216.8,"g":-5.9,"r":10.2,"grade":1,"gg":1,"rg":1,"e":0,"x":1570953.5,"y":5173126.2},{"d":131,"z":216.0,"g":-6.6,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570949.1,"y":5173128.6},{"d":136,"z":214.5,"g":-6.0,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570944.7,"y":5173131.1},{"d":141,"z":213.9,"g":-6.1,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570940.4,"y":5173133.5},{"d":146,"z":213.5,"g":-5.0,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570936.0,"y":5173135.9},{"d":151,"z":213.8,"g":-7.3,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570931.6,"y":5173138.4},{"d":156,"z":214.0,"g":-4.8,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570927.3,"y":5173140.8},{"d":161,"z":213.8,"g":-1.1,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570922.9,"y":5173143.2},{"d":166,"z":214.0,"g":-1.7,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570918.5,"y":5173145.7},{"d":167,"z":214.4,"g":-1.7,"r":27.0,"grade":1,"gg":1,"rg":1,"e":0,"x":1570917.9,"y":5173146.0},{"d":172,"z":213.8,"g":-1.1,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570913.3,"y":5173148.0},{"d":177,"z":213.1,"g":-3.1,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570908.7,"y":5173149.9},{"d":182,"z":213.5,"g":-3.6,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570904.1,"y":5173151.9},{"d":187,"z":213.9,"g":-3.4,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570899.5,"y":5173153.9},{"d":192,"z":213.0,"g":-3.8,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570894.8,"y":5173155.8},{"d":197,"z":213.0,"g":-3.2,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570890.2,"y":5173157.8},{"d":202,"z":212.3,"g":-2.0,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570885.6,"y":5173159.7},{"d":207,"z":212.1,"g":-2.6,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570881.0,"y":5173161.7},{"d":209,"z":211.8,"g":-2.6,"r":40.9,"grade":1,"gg":1,"rg":1,"e":0,"x":1570879.0,"y":5173162.5},{"d":214,"z":212.0,"g":-3.6,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570874.6,"y":5173164.9},{"d":219,"z":212.4,"g":-2.2,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570870.2,"y":5173167.2},{"d":224,"z":212.1,"g":-2.8,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570865.8,"y":5173169.6},{"d":229,"z":212.1,"g":-2.2,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570861.4,"y":5173171.9},{"d":234,"z":212.2,"g":-2.9,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570857.0,"y":5173174.3},{"d":239,"z":212.1,"g":-4.2,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570852.6,"y":5173176.6},{"d":244,"z":211.9,"g":-5.4,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570848.2,"y":5173179.0},{"d":249,"z":211.5,"g":-7.6,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570843.7,"y":5173181.3},{"d":254,"z":211.1,"g":-9.1,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570839.3,"y":5173183.7},{"d":259,"z":210.4,"g":-10.7,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570834.9,"y":5173186.0},{"d":264,"z":210.0,"g":-10.8,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570830.5,"y":5173188.4},{"d":269,"z":209.7,"g":-11.7,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570826.1,"y":5173190.7},{"d":272,"z":209.4,"g":-11.8,"r":13.5,"grade":2,"gg":2,"rg":1,"e":0,"x":1570823.2,"y":5173192.3},{"d":277,"z":208.0,"g":-11.3,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570818.3,"y":5173193.2},{"d":282,"z":207.2,"g":-11.6,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570813.4,"y":5173194.1},{"d":287,"z":206.5,"g":-11.2,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570808.5,"y":5173195.0},{"d":292,"z":206.3,"g":-10.6,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570803.5,"y":5173195.9},{"d":296,"z":205.8,"g":-11.2,"r":46.1,"grade":2,"gg":2,"rg":1,"e":0,"x":1570799.8,"y":5173196.6},{"d":301,"z":205.2,"g":-11.6,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570795.0,"y":5173198.0},{"d":306,"z":205.1,"g":-8.7,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570790.2,"y":5173199.4},{"d":311,"z":204.5,"g":-8.1,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570785.4,"y":5173200.7},{"d":316,"z":203.9,"g":-7.3,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570780.6,"y":5173202.1},{"d":321,"z":203.9,"g":-7.8,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570775.8,"y":5173203.5},{"d":326,"z":203.1,"g":-8.1,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570770.9,"y":5173204.9},{"d":331,"z":203.4,"g":-8.8,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570766.1,"y":5173206.2},{"d":336,"z":202.9,"g":-9.1,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570761.3,"y":5173207.6},{"d":340,"z":202.4,"g":-9.1,"r":49.5,"grade":2,"gg":2,"rg":1,"e":0,"x":1570757.8,"y":5173208.6},{"d":345,"z":202.3,"g":-10.4,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570753.1,"y":5173210.4},{"d":350,"z":201.6,"g":-11.4,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570748.4,"y":5173212.2},{"d":355,"z":200.8,"g":-11.5,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570743.8,"y":5173214.0},{"d":360,"z":200.3,"g":-12.7,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570739.1,"y":5173215.8},{"d":365,"z":199.6,"g":-13.0,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570734.4,"y":5173217.6},{"d":370,"z":198.4,"g":-13.2,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570729.8,"y":5173219.4},{"d":375,"z":197.8,"g":-11.7,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570725.1,"y":5173221.2},{"d":380,"z":196.9,"g":-11.0,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570720.4,"y":5173223.0},{"d":385,"z":196.5,"g":-10.4,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570715.8,"y":5173224.8},{"d":386,"z":196.9,"g":-10.4,"r":4.5,"grade":2,"gg":2,"rg":2,"e":0,"x":1570714.9,"y":5173225.1},{"d":391,"z":195.8,"g":-10.2,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570710.2,"y":5173223.5},{"d":396,"z":195.6,"g":-8.2,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570705.4,"y":5173222.0},{"d":401,"z":195.7,"g":-9.2,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570700.7,"y":5173220.4},{"d":406,"z":195.2,"g":-8.0,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570695.9,"y":5173218.8},{"d":411,"z":195.0,"g":-8.9,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570691.2,"y":5173217.2},{"d":416,"z":194.4,"g":-8.6,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570686.4,"y":5173215.6},{"d":421,"z":194.2,"g":-9.9,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570681.7,"y":5173214.1},{"d":422,"z":194.0,"g":-9.9,"r":5.1,"grade":2,"gg":2,"rg":2,"e":0,"x":1570681.1,"y":5173213.9},{"d":426,"z":193.1,"g":-10.0,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570677.9,"y":5173210.0},{"d":432,"z":192.8,"g":-9.1,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570674.8,"y":5173206.1},{"d":434,"z":192.6,"g":-9.1,"r":7.7,"grade":2,"gg":2,"rg":1,"e":0,"x":1570673.0,"y":5173203.8},{"d":439,"z":192.1,"g":-9.9,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570672.2,"y":5173198.9},{"d":444,"z":191.2,"g":-11.0,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570671.5,"y":5173193.9},{"d":444,"z":191.2,"g":-11.0,"r":3.4,"grade":3,"gg":2,"rg":3,"e":0,"x":1570671.5,"y":5173193.8},{"d":449,"z":190.3,"g":-12.0,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570674.6,"y":5173190.0},{"d":454,"z":190.3,"g":-12.9,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570677.8,"y":5173186.1},{"d":456,"z":190.6,"g":-12.9,"r":8.9,"grade":2,"gg":2,"rg":1,"e":0,"x":1570678.8,"y":5173185.0},{"d":461,"z":190.2,"g":-14.4,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570680.3,"y":5173180.2},{"d":466,"z":189.6,"g":-15.2,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570681.9,"y":5173175.5},{"d":469,"z":189.1,"g":-13.9,"r":4.1,"grade":2,"gg":2,"rg":2,"e":0,"x":1570682.8,"y":5173172.8},{"d":474,"z":188.1,"g":-12.7,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570679.6,"y":5173168.9},{"d":478,"z":187.2,"g":-12.2,"r":4.6,"grade":2,"gg":2,"rg":2,"e":0,"x":1570677.2,"y":5173166.1},{"d":482,"z":185.9,"g":-13.9,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570672.3,"y":5173166.7},{"d":486,"z":185.0,"g":-13.5,"r":7.8,"grade":2,"gg":2,"rg":1,"e":0,"x":1570669.1,"y":5173167.2},{"d":491,"z":184.4,"g":-13.4,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570665.2,"y":5173170.2},{"d":493,"z":184.0,"g":-10.6,"r":15.0,"grade":2,"gg":2,"rg":1,"e":0,"x":1570663.5,"y":5173171.6},{"d":498,"z":184.0,"g":-8.0,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570660.4,"y":5173175.5},{"d":503,"z":183.8,"g":-5.2,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570657.3,"y":5173179.4},{"d":508,"z":183.4,"g":-4.1,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570654.2,"y":5173183.3},{"d":511,"z":183.2,"g":-2.6,"r":15.5,"grade":1,"gg":1,"rg":1,"e":0,"x":1570652.1,"y":5173186.0},{"d":516,"z":182.8,"g":-1.8,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570650.2,"y":5173190.6},{"d":521,"z":183.7,"g":-1.6,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570648.2,"y":5173195.2},{"d":526,"z":184.5,"g":-4.4,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570646.3,"y":5173199.8},{"d":528,"z":184.6,"g":-6.4,"r":20.3,"grade":1,"gg":1,"rg":1,"e":0,"x":1570645.6,"y":5173201.5},{"d":533,"z":183.8,"g":-9.8,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570642.9,"y":5173205.7},{"d":538,"z":183.6,"g":-11.8,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570640.2,"y":5173209.9},{"d":543,"z":183.5,"g":-13.6,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570637.5,"y":5173214.1},{"d":548,"z":183.1,"g":-16.8,"r":9.7,"grade":3,"gg":3,"rg":1,"e":0,"x":1570635.0,"y":5173218.1},{"d":553,"z":181.6,"g":-19.6,"r":null,"grade":4,"gg":4,"rg":1,"e":0,"x":1570630.6,"y":5173220.5},{"d":558,"z":180.3,"g":-18.8,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570626.2,"y":5173222.9},{"d":563,"z":178.0,"g":-17.5,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570621.8,"y":5173225.3},{"d":566,"z":176.7,"g":-17.6,"r":7.5,"grade":3,"gg":3,"rg":1,"e":0,"x":1570618.8,"y":5173226.9},{"d":570,"z":175.5,"g":-16.7,"r":6.2,"grade":3,"gg":3,"rg":1,"e":0,"x":1570614.8,"y":5173226.9},{"d":575,"z":174.6,"g":-16.4,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570611.1,"y":5173223.5},{"d":577,"z":173.9,"g":-16.4,"r":3.8,"grade":3,"gg":3,"rg":3,"e":0,"x":1570610.0,"y":5173222.4},{"d":582,"z":173.6,"g":-14.9,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570610.5,"y":5173217.5},{"d":585,"z":173.9,"g":-13.2,"r":10.5,"grade":2,"gg":2,"rg":1,"e":0,"x":1570610.8,"y":5173214.7},{"d":590,"z":173.9,"g":-9.5,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570613.1,"y":5173210.2},{"d":595,"z":173.7,"g":-8.0,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570615.5,"y":5173205.8},{"d":600,"z":174.0,"g":-8.8,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570617.8,"y":5173201.4},{"d":602,"z":174.2,"g":-6.1,"r":3.0,"grade":3,"gg":1,"rg":3,"e":0,"x":1570619.0,"y":5173199.1},{"d":604,"z":174.4,"g":-7.4,"r":2.5,"grade":3,"gg":2,"rg":3,"e":0,"x":1570618.2,"y":5173196.9},{"d":609,"z":173.2,"g":-8.9,"r":6.1,"grade":2,"gg":2,"rg":1,"e":0,"x":1570614.1,"y":5173198.0},{"d":614,"z":172.9,"g":-9.7,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570611.6,"y":5173202.3},{"d":619,"z":172.7,"g":-10.8,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570609.1,"y":5173206.6},{"d":622,"z":172.2,"g":-11.6,"r":13.1,"grade":2,"gg":2,"rg":1,"e":0,"x":1570607.6,"y":5173209.1},{"d":626,"z":170.6,"g":-14.2,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570603.9,"y":5173212.5},{"d":628,"z":170.8,"g":-15.2,"r":3.9,"grade":3,"gg":3,"rg":3,"e":0,"x":1570602.8,"y":5173213.5},{"d":632,"z":169.8,"g":-15.0,"r":4.5,"grade":3,"gg":3,"rg":2,"e":0,"x":1570598.7,"y":5173213.5},{"d":636,"z":168.8,"g":-13.0,"r":5.6,"grade":2,"gg":2,"rg":2,"e":0,"x":1570596.3,"y":5173210.2},{"d":641,"z":168.5,"g":-14.1,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570597.4,"y":5173205.3},{"d":646,"z":167.8,"g":-13.9,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570598.5,"y":5173200.4},{"d":648,"z":167.6,"g":-13.9,"r":2.5,"grade":3,"gg":2,"rg":3,"e":0,"x":1570598.8,"y":5173199.1},{"d":650,"z":167.4,"g":-13.5,"r":2.6,"grade":3,"gg":2,"rg":3,"e":0,"x":1570597.2,"y":5173196.8},{"d":654,"z":166.3,"g":-12.8,"r":6.3,"grade":2,"gg":2,"rg":1,"e":0,"x":1570593.9,"y":5173197.9},{"d":658,"z":166.3,"g":-11.9,"r":35.3,"grade":2,"gg":2,"rg":1,"e":0,"x":1570591.5,"y":5173201.2},{"d":663,"z":166.1,"g":-11.9,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570589.1,"y":5173205.6},{"d":668,"z":165.2,"g":-13.7,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570586.7,"y":5173210.0},{"d":673,"z":165.1,"g":-13.4,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570584.3,"y":5173214.4},{"d":678,"z":164.6,"g":-12.6,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570581.9,"y":5173218.8},{"d":683,"z":163.8,"g":-11.2,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570579.4,"y":5173223.1},{"d":683,"z":163.8,"g":-11.2,"r":9.2,"grade":2,"gg":2,"rg":1,"e":0,"x":1570579.3,"y":5173223.4},{"d":688,"z":163.5,"g":-9.0,"r":8.4,"grade":2,"gg":2,"rg":1,"e":0,"x":1570576.1,"y":5173226.7},{"d":692,"z":162.1,"g":-7.6,"r":4.8,"grade":2,"gg":2,"rg":2,"e":0,"x":1570572.0,"y":5173227.8},{"d":696,"z":161.0,"g":-6.7,"r":9.6,"grade":1,"gg":1,"rg":1,"e":0,"x":1570568.8,"y":5173225.6},{"d":701,"z":160.4,"g":-7.9,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570566.4,"y":5173221.2},{"d":701,"z":160.4,"g":-7.9,"r":3.6,"grade":3,"gg":2,"rg":3,"e":0,"x":1570566.4,"y":5173221.1},{"d":706,"z":160.4,"g":-5.6,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570567.7,"y":5173216.3},{"d":710,"z":160.5,"g":-5.5,"r":18.1,"grade":1,"gg":1,"rg":1,"e":0,"x":1570568.9,"y":5173212.3},{"d":715,"z":161.2,"g":-5.4,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570571.4,"y":5173207.9},{"d":720,"z":161.8,"g":-3.8,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570573.9,"y":5173203.6},{"d":725,"z":161.4,"g":-4.3,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570576.4,"y":5173199.3},{"d":730,"z":160.6,"g":-3.9,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570578.9,"y":5173195.0},{"d":734,"z":161.5,"g":-4.6,"r":7.4,"grade":1,"gg":1,"rg":1,"e":0,"x":1570581.1,"y":5173191.2},{"d":740,"z":160.7,"g":-5.0,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570580.5,"y":5173186.2},{"d":744,"z":160.4,"g":-7.3,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570579.9,"y":5173181.3},{"d":748,"z":160.0,"g":-9.3,"r":3.2,"grade":3,"gg":2,"rg":3,"e":0,"x":1570579.5,"y":5173177.9},{"d":753,"z":158.6,"g":-9.6,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570574.5,"y":5173177.9},{"d":754,"z":158.4,"g":-9.6,"r":3.5,"grade":3,"gg":2,"rg":3,"e":0,"x":1570573.0,"y":5173177.8},{"d":759,"z":158.1,"g":-9.7,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570570.4,"y":5173182.1},{"d":764,"z":157.7,"g":-13.0,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570567.8,"y":5173186.3},{"d":769,"z":157.5,"g":-12.6,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570565.1,"y":5173190.6},{"d":771,"z":157.1,"g":-13.3,"r":18.1,"grade":2,"gg":2,"rg":1,"e":0,"x":1570564.1,"y":5173192.2},{"d":776,"z":156.5,"g":-11.4,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570560.7,"y":5173195.9},{"d":781,"z":156.0,"g":-9.4,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570557.3,"y":5173199.6},{"d":786,"z":155.1,"g":-9.8,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570553.9,"y":5173203.2},{"d":791,"z":154.1,"g":-9.3,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570550.5,"y":5173206.9},{"d":794,"z":153.1,"g":-9.3,"r":7.1,"grade":2,"gg":2,"rg":1,"e":0,"x":1570548.7,"y":5173208.8},{"d":799,"z":153.2,"g":-8.4,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570547.7,"y":5173213.7},{"d":804,"z":153.6,"g":-8.4,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570546.7,"y":5173218.6},{"d":809,"z":153.2,"g":-10.2,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570545.7,"y":5173223.5},{"d":814,"z":152.8,"g":-11.7,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570544.6,"y":5173228.4},{"d":814,"z":152.8,"g":-11.7,"r":9.6,"grade":2,"gg":2,"rg":1,"e":0,"x":1570544.6,"y":5173228.8},{"d":819,"z":152.6,"g":-13.0,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570545.0,"y":5173233.8},{"d":824,"z":152.6,"g":-14.2,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570545.4,"y":5173238.8},{"d":829,"z":152.1,"g":-15.9,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570545.8,"y":5173243.8},{"d":833,"z":151.6,"g":-17.0,"r":26.6,"grade":3,"gg":3,"rg":1,"e":0,"x":1570546.1,"y":5173247.7},{"d":838,"z":150.2,"g":-17.8,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570547.3,"y":5173252.5},{"d":843,"z":148.5,"g":-17.3,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570548.6,"y":5173257.4},{"d":848,"z":146.1,"g":-15.0,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570549.8,"y":5173262.2},{"d":849,"z":146.1,"g":-16.5,"r":6.4,"grade":3,"gg":3,"rg":1,"e":0,"x":1570550.1,"y":5173263.3},{"d":854,"z":145.6,"g":-13.5,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570553.4,"y":5173267.0},{"d":859,"z":144.2,"g":-14.5,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570556.8,"y":5173270.7},{"d":864,"z":143.4,"g":-14.0,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570560.1,"y":5173274.4},{"d":867,"z":142.9,"g":-14.0,"r":20.5,"grade":2,"gg":2,"rg":1,"e":0,"x":1570562.1,"y":5173276.6},{"d":872,"z":142.7,"g":-12.4,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570566.1,"y":5173279.6},{"d":877,"z":143.9,"g":-8.4,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570570.1,"y":5173282.6},{"d":882,"z":144.9,"g":-8.6,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570574.1,"y":5173285.6},{"d":887,"z":143.7,"g":-8.9,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570578.1,"y":5173288.6},{"d":892,"z":142.6,"g":-8.3,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570582.1,"y":5173291.6},{"d":894,"z":142.3,"g":-7.5,"r":9.7,"grade":2,"gg":2,"rg":1,"e":0,"x":1570583.0,"y":5173292.3},{"d":898,"z":141.6,"g":-9.1,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570587.8,"y":5173293.9},{"d":904,"z":141.5,"g":-12.0,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570592.5,"y":5173295.5},{"d":908,"z":141.0,"g":-14.8,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570597.2,"y":5173297.1},{"d":914,"z":139.4,"g":-11.8,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570602.0,"y":5173298.7},{"d":918,"z":138.7,"g":-10.8,"r":56.6,"grade":2,"gg":2,"rg":1,"e":0,"x":1570606.4,"y":5173300.2},{"d":923,"z":138.7,"g":-8.4,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570611.0,"y":5173302.2},{"d":928,"z":137.7,"g":-6.4,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570615.6,"y":5173304.1},{"d":933,"z":137.2,"g":-5.7,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570620.2,"y":5173306.1},{"d":938,"z":136.7,"g":-9.7,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570624.7,"y":5173308.1},{"d":943,"z":137.1,"g":-11.5,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570629.3,"y":5173310.1},{"d":946,"z":137.5,"g":-11.5,"r":24.7,"grade":2,"gg":2,"rg":1,"e":0,"x":1570632.2,"y":5173311.4},{"d":951,"z":137.4,"g":-15.3,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570636.4,"y":5173314.1},{"d":956,"z":137.9,"g":-14.4,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570640.6,"y":5173316.8},{"d":961,"z":138.3,"g":-16.2,"r":6.3,"grade":3,"gg":3,"rg":1,"e":0,"x":1570644.3,"y":5173319.2},{"d":966,"z":135.4,"g":-16.5,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570645.4,"y":5173324.1},{"d":968,"z":134.8,"g":-16.5,"r":4.8,"grade":3,"gg":3,"rg":2,"e":0,"x":1570645.9,"y":5173325.9},{"d":972,"z":132.5,"g":-21.5,"r":null,"grade":4,"gg":4,"rg":1,"e":0,"x":1570643.4,"y":5173330.3},{"d":973,"z":132.5,"g":-21.5,"r":3.3,"grade":4,"gg":4,"rg":3,"e":0,"x":1570643.4,"y":5173330.3},{"d":978,"z":130.4,"g":-18.7,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570638.5,"y":5173331.3},{"d":978,"z":130.1,"g":-18.7,"r":5.7,"grade":3,"gg":3,"rg":2,"e":0,"x":1570637.8,"y":5173331.4},{"d":983,"z":129.7,"g":-18.1,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570633.0,"y":5173329.7},{"d":988,"z":128.3,"g":-15.7,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570628.3,"y":5173328.1},{"d":993,"z":127.6,"g":-7.5,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570623.6,"y":5173326.5},{"d":998,"z":126.4,"g":-0.5,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570618.9,"y":5173324.8},{"d":1002,"z":126.3,"g":-0.5,"r":51.5,"grade":1,"gg":1,"rg":1,"e":0,"x":1570615.2,"y":5173323.5},{"d":1007,"z":127.0,"g":5.8,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570610.6,"y":5173321.5},{"d":1012,"z":127.8,"g":6.8,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570606.1,"y":5173319.4},{"d":1017,"z":129.4,"g":9.2,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570601.5,"y":5173317.4},{"d":1022,"z":130.7,"g":10.2,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570596.9,"y":5173315.3},{"d":1027,"z":132.2,"g":13.5,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570592.4,"y":5173313.3},{"d":1030,"z":132.9,"g":11.6,"r":16.1,"grade":2,"gg":2,"rg":1,"e":0,"x":1570590.2,"y":5173312.3},{"d":1035,"z":133.3,"g":8.6,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570585.3,"y":5173311.4},{"d":1040,"z":133.5,"g":5.8,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570580.4,"y":5173310.4},{"d":1045,"z":133.5,"g":1.0,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570575.5,"y":5173309.4},{"d":1050,"z":133.3,"g":-3.0,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570570.6,"y":5173308.5},{"d":1054,"z":133.2,"g":-6.2,"r":21.7,"grade":1,"gg":1,"rg":1,"e":0,"x":1570566.8,"y":5173307.8},{"d":1058,"z":132.8,"g":-8.2,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570562.2,"y":5173305.8},{"d":1064,"z":131.8,"g":-6.3,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570557.6,"y":5173303.9},{"d":1068,"z":131.0,"g":-5.4,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570553.0,"y":5173302.0},{"d":1074,"z":130.0,"g":-3.3,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570548.4,"y":5173300.0},{"d":1078,"z":129.0,"g":-5.1,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570543.8,"y":5173298.1},{"d":1084,"z":128.5,"g":-6.5,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570539.1,"y":5173296.2},{"d":1088,"z":129.1,"g":-6.2,"r":20.2,"grade":1,"gg":1,"rg":1,"e":0,"x":1570534.6,"y":5173294.3},{"d":1093,"z":129.6,"g":-4.8,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570530.6,"y":5173291.3},{"d":1098,"z":130.4,"g":-4.2,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570526.6,"y":5173288.3},{"d":1101,"z":131.6,"g":-2.6,"r":8.0,"grade":1,"gg":1,"rg":1,"e":0,"x":1570524.1,"y":5173286.5},{"d":1106,"z":130.5,"g":-1.2,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570519.2,"y":5173285.8},{"d":1110,"z":129.4,"g":-2.4,"r":19.7,"grade":1,"gg":1,"rg":1,"e":0,"x":1570515.3,"y":5173285.3},{"d":1115,"z":129.3,"g":-4.9,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570510.6,"y":5173283.6},{"d":1120,"z":129.0,"g":-3.8,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570505.9,"y":5173281.8},{"d":1123,"z":128.4,"g":-3.8,"r":9.3,"grade":1,"gg":1,"rg":1,"e":0,"x":1570503.2,"y":5173280.8},{"d":1128,"z":128.6,"g":-4.5,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570499.6,"y":5173277.3},{"d":1133,"z":128.3,"g":-4.9,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570496.1,"y":5173273.7},{"d":1138,"z":127.2,"g":-4.1,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570492.6,"y":5173270.2},{"d":1143,"z":126.4,"g":-5.3,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570489.0,"y":5173266.7},{"d":1144,"z":126.0,"g":-5.3,"r":5.8,"grade":2,"gg":1,"rg":2,"e":0,"x":1570488.7,"y":5173266.3},{"d":1149,"z":127.5,"g":-4.4,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570487.2,"y":5173261.5},{"d":1152,"z":127.9,"g":-5.6,"r":8.8,"grade":1,"gg":1,"rg":1,"e":0,"x":1570486.3,"y":5173258.5},{"d":1157,"z":129.1,"g":-6.3,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570487.2,"y":5173253.6},{"d":1162,"z":127.7,"g":-10.5,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570488.0,"y":5173248.7},{"d":1167,"z":127.1,"g":-12.1,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570488.8,"y":5173243.8},{"d":1172,"z":126.3,"g":-10.6,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570489.7,"y":5173238.8},{"d":1177,"z":126.1,"g":-12.6,"r":6.3,"grade":2,"gg":2,"rg":1,"e":0,"x":1570490.5,"y":5173234.1},{"d":1182,"z":125.2,"g":-12.6,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570487.5,"y":5173230.1},{"d":1184,"z":125.1,"g":-16.0,"r":3.4,"grade":3,"gg":3,"rg":3,"e":0,"x":1570486.4,"y":5173228.6},{"d":1188,"z":122.6,"g":-12.5,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570481.5,"y":5173229.4},{"d":1190,"z":120.5,"g":-12.7,"r":3.9,"grade":3,"gg":2,"rg":3,"e":0,"x":1570480.0,"y":5173229.6},{"d":1195,"z":120.3,"g":-12.8,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570477.6,"y":5173234.0},{"d":1200,"z":120.1,"g":-11.9,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570475.2,"y":5173238.4},{"d":1200,"z":120.1,"g":-11.9,"r":5.3,"grade":2,"gg":2,"rg":2,"e":0,"x":1570475.1,"y":5173238.5},{"d":1205,"z":120.4,"g":-13.1,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570475.1,"y":5173243.5},{"d":1210,"z":120.6,"g":-15.9,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570475.1,"y":5173248.5},{"d":1214,"z":121.3,"g":-14.6,"r":13.6,"grade":3,"gg":3,"rg":1,"e":0,"x":1570475.0,"y":5173251.8},{"d":1218,"z":120.6,"g":-11.1,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570473.5,"y":5173256.6},{"d":1224,"z":119.9,"g":-12.5,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570472.0,"y":5173261.3},{"d":1228,"z":119.5,"g":-14.7,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570470.4,"y":5173266.1},{"d":1232,"z":118.9,"g":-14.8,"r":6.2,"grade":3,"gg":3,"rg":1,"e":0,"x":1570469.3,"y":5173269.6},{"d":1237,"z":116.6,"g":-14.8,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570465.0,"y":5173272.2},{"d":1241,"z":114.9,"g":-17.1,"r":4.1,"grade":3,"gg":3,"rg":2,"e":0,"x":1570462.0,"y":5173274.0},{"d":1245,"z":114.4,"g":-14.1,"r":6.5,"grade":3,"gg":3,"rg":1,"e":0,"x":1570458.0,"y":5173271.7},{"d":1250,"z":113.4,"g":-14.5,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570456.5,"y":5173267.0},{"d":1255,"z":112.0,"g":-15.9,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570455.0,"y":5173262.2},{"d":1256,"z":112.1,"g":-15.9,"r":4.8,"grade":3,"gg":3,"rg":2,"e":0,"x":1570454.8,"y":5173261.7},{"d":1261,"z":112.1,"g":-16.2,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570456.2,"y":5173256.9},{"d":1266,"z":112.3,"g":-14.0,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570457.7,"y":5173252.1},{"d":1271,"z":113.2,"g":-17.5,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570459.1,"y":5173247.3},{"d":1273,"z":112.4,"g":-17.5,"r":21.5,"grade":3,"gg":3,"rg":1,"e":0,"x":1570459.7,"y":5173245.1},{"d":1278,"z":112.0,"g":-15.3,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570460.3,"y":5173240.1},{"d":1283,"z":110.9,"g":-13.8,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570460.9,"y":5173235.2},{"d":1288,"z":109.9,"g":-15.0,"r":7.6,"grade":3,"gg":3,"rg":1,"e":0,"x":1570461.4,"y":5173230.7},{"d":1293,"z":107.6,"g":-16.6,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570458.9,"y":5173226.3},{"d":1294,"z":107.5,"g":-16.1,"r":3.3,"grade":3,"gg":3,"rg":3,"e":0,"x":1570458.2,"y":5173225.1},{"d":1299,"z":105.0,"g":-18.7,"r":4.6,"grade":3,"gg":3,"rg":2,"e":0,"x":1570453.4,"y":5173225.1},{"d":1304,"z":105.2,"g":-18.5,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570451.3,"y":5173229.6},{"d":1309,"z":104.8,"g":-17.4,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570449.2,"y":5173234.1},{"d":1314,"z":104.2,"g":-14.2,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570447.0,"y":5173238.7},{"d":1319,"z":103.5,"g":-12.4,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570444.9,"y":5173243.2},{"d":1324,"z":103.0,"g":-9.0,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570442.8,"y":5173247.7},{"d":1329,"z":102.6,"g":-11.4,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570440.7,"y":5173252.3},{"d":1334,"z":102.0,"g":-9.6,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570438.6,"y":5173256.8},{"d":1339,"z":102.6,"g":-7.9,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570436.5,"y":5173261.3},{"d":1344,"z":101.3,"g":-6.7,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570434.4,"y":5173265.9},{"d":1349,"z":100.5,"g":-5.4,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570432.3,"y":5173270.4},{"d":1354,"z":99.5,"g":-4.3,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570430.2,"y":5173274.9},{"d":1359,"z":99.5,"g":-6.4,"r":14.6,"grade":1,"gg":1,"rg":1,"e":0,"x":1570428.1,"y":5173279.4},{"d":1364,"z":99.5,"g":-6.8,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570427.6,"y":5173284.4},{"d":1368,"z":99.9,"g":-8.7,"r":10.2,"grade":2,"gg":2,"rg":1,"e":0,"x":1570427.3,"y":5173288.3},{"d":1373,"z":99.9,"g":-5.8,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570428.9,"y":5173293.0},{"d":1377,"z":100.1,"g":-5.0,"r":10.6,"grade":1,"gg":1,"rg":1,"e":0,"x":1570430.4,"y":5173297.2},{"d":1382,"z":100.3,"g":-6.5,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570434.0,"y":5173300.7},{"d":1387,"z":98.8,"g":-9.1,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570437.6,"y":5173304.2},{"d":1392,"z":98.1,"g":-8.5,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570441.1,"y":5173307.7},{"d":1397,"z":97.5,"g":-8.9,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570444.7,"y":5173311.2},{"d":1402,"z":97.9,"g":-8.4,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570448.3,"y":5173314.7},{"d":1404,"z":97.0,"g":-8.4,"r":23.1,"grade":2,"gg":2,"rg":1,"e":0,"x":1570449.7,"y":5173316.1},{"d":1409,"z":95.9,"g":-9.1,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570453.8,"y":5173319.1},{"d":1414,"z":94.5,"g":-8.4,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570457.9,"y":5173322.0},{"d":1419,"z":94.8,"g":-6.8,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570461.9,"y":5173324.9},{"d":1424,"z":94.9,"g":-6.8,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570466.0,"y":5173327.8},{"d":1429,"z":95.7,"g":-5.7,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570470.0,"y":5173330.7},{"d":1431,"z":95.9,"g":-5.7,"r":107.9,"grade":1,"gg":1,"rg":1,"e":0,"x":1570471.5,"y":5173331.8},{"d":1436,"z":95.4,"g":-4.4,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570475.6,"y":5173334.6},{"d":1441,"z":94.3,"g":-2.9,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570479.8,"y":5173337.4},{"d":1446,"z":94.4,"g":-4.1,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570483.9,"y":5173340.2},{"d":1451,"z":93.9,"g":-3.7,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570488.1,"y":5173342.9},{"d":1456,"z":94.0,"g":-6.1,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570492.2,"y":5173345.7},{"d":1461,"z":93.7,"g":-7.1,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570496.3,"y":5173348.5},{"d":1463,"z":93.6,"g":-10.0,"r":15.4,"grade":2,"gg":2,"rg":1,"e":0,"x":1570498.0,"y":5173349.7},{"d":1468,"z":92.9,"g":-11.3,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570502.7,"y":5173351.4},{"d":1473,"z":92.5,"g":-13.1,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570507.4,"y":5173353.2},{"d":1478,"z":92.9,"g":-14.9,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570512.0,"y":5173355.0},{"d":1482,"z":92.8,"g":-18.0,"r":4.3,"grade":3,"gg":3,"rg":2,"e":0,"x":1570515.8,"y":5173356.4},{"d":1487,"z":91.8,"g":-15.5,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570516.2,"y":5173361.4},{"d":1490,"z":90.0,"g":-16.0,"r":4.9,"grade":3,"gg":3,"rg":2,"e":0,"x":1570516.5,"y":5173364.2},{"d":1494,"z":88.4,"g":-15.2,"r":5.0,"grade":3,"gg":3,"rg":2,"e":0,"x":1570514.1,"y":5173367.5},{"d":1499,"z":87.5,"g":-14.5,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570509.1,"y":5173367.5},{"d":1504,"z":86.0,"g":-15.7,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570504.1,"y":5173367.5},{"d":1509,"z":84.5,"g":-15.3,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570499.1,"y":5173367.4},{"d":1511,"z":84.0,"g":-15.3,"r":11.0,"grade":3,"gg":3,"rg":1,"e":0,"x":1570497.1,"y":5173367.4},{"d":1516,"z":85.1,"g":-9.7,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570492.4,"y":5173365.8},{"d":1521,"z":84.9,"g":-6.1,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570487.7,"y":5173364.3},{"d":1526,"z":84.9,"g":-5.7,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570482.9,"y":5173362.7},{"d":1531,"z":84.6,"g":-3.9,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570478.2,"y":5173361.1},{"d":1532,"z":84.3,"g":-3.9,"r":20.2,"grade":1,"gg":1,"rg":1,"e":0,"x":1570477.0,"y":5173360.7},{"d":1537,"z":84.3,"g":0.2,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570472.5,"y":5173358.4},{"d":1542,"z":84.9,"g":-3.1,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570468.1,"y":5173356.1},{"d":1547,"z":85.1,"g":-0.7,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570463.7,"y":5173353.8},{"d":1552,"z":84.4,"g":0.6,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570459.2,"y":5173351.5},{"d":1557,"z":84.0,"g":2.0,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570454.8,"y":5173349.2},{"d":1562,"z":84.1,"g":-0.6,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570450.4,"y":5173346.9},{"d":1567,"z":83.6,"g":-2.1,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570445.9,"y":5173344.6},{"d":1572,"z":84.5,"g":-1.9,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570441.5,"y":5173342.3},{"d":1577,"z":85.2,"g":-3.6,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570437.0,"y":5173340.0},{"d":1582,"z":85.3,"g":-1.7,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570432.6,"y":5173337.7},{"d":1587,"z":84.1,"g":0.8,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570428.2,"y":5173335.4},{"d":1592,"z":83.9,"g":2.7,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570423.7,"y":5173333.1},{"d":1597,"z":84.2,"g":0.2,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570419.3,"y":5173330.8},{"d":1602,"z":82.7,"g":-2.9,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570414.8,"y":5173328.5},{"d":1607,"z":83.1,"g":-7.8,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570410.4,"y":5173326.2},{"d":1612,"z":84.5,"g":-8.0,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570406.0,"y":5173323.9},{"d":1617,"z":84.9,"g":-10.0,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570401.5,"y":5173321.6},{"d":1622,"z":84.6,"g":-10.1,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570397.1,"y":5173319.3},{"d":1625,"z":84.2,"g":-9.5,"r":3.8,"grade":3,"gg":2,"rg":3,"e":0,"x":1570394.8,"y":5173318.1},{"d":1628,"z":83.7,"g":-9.3,"r":5.5,"grade":2,"gg":2,"rg":2,"e":0,"x":1570391.6,"y":5173319.2},{"d":1633,"z":81.3,"g":-13.4,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570389.4,"y":5173323.7},{"d":1636,"z":81.3,"g":-13.4,"r":5.5,"grade":2,"gg":2,"rg":2,"e":0,"x":1570388.3,"y":5173325.9},{"d":1640,"z":79.8,"g":-14.8,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570389.5,"y":5173330.7},{"d":1642,"z":78.9,"g":-15.3,"r":3.8,"grade":3,"gg":3,"rg":3,"e":0,"x":1570389.9,"y":5173332.5},{"d":1647,"z":79.2,"g":-14.4,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570394.6,"y":5173334.3},{"d":1652,"z":79.0,"g":-14.3,"r":21.2,"grade":3,"gg":3,"rg":1,"e":0,"x":1570398.8,"y":5173335.9},{"d":1657,"z":77.5,"g":-14.6,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570403.0,"y":5173338.7},{"d":1662,"z":75.7,"g":-9.3,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570407.1,"y":5173341.4},{"d":1667,"z":76.4,"g":-6.2,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570411.3,"y":5173344.2},{"d":1672,"z":76.5,"g":-5.8,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570415.4,"y":5173347.0},{"d":1677,"z":76.8,"g":-7.0,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570419.6,"y":5173349.8},{"d":1682,"z":75.9,"g":-2.3,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570423.8,"y":5173352.5},{"d":1687,"z":76.5,"g":-0.3,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570427.9,"y":5173355.3},{"d":1692,"z":76.6,"g":-2.9,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570432.1,"y":5173358.1},{"d":1697,"z":75.7,"g":-2.3,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570436.2,"y":5173360.9},{"d":1702,"z":75.5,"g":-3.9,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570440.4,"y":5173363.6},{"d":1707,"z":76.4,"g":-3.8,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570444.6,"y":5173366.4},{"d":1712,"z":75.6,"g":-6.0,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570448.7,"y":5173369.2},{"d":1717,"z":75.0,"g":-6.6,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570452.9,"y":5173372.0},{"d":1722,"z":75.4,"g":-5.9,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570457.0,"y":5173374.7},{"d":1727,"z":74.8,"g":-9.7,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570461.2,"y":5173377.5},{"d":1732,"z":73.9,"g":-15.7,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570465.4,"y":5173380.3},{"d":1737,"z":73.5,"g":-16.4,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570469.5,"y":5173383.1},{"d":1742,"z":73.3,"g":-16.5,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570473.7,"y":5173385.8},{"d":1747,"z":72.8,"g":-17.1,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570477.8,"y":5173388.6},{"d":1749,"z":72.9,"g":-16.2,"r":4.1,"grade":3,"gg":3,"rg":2,"e":0,"x":1570479.3,"y":5173389.6},{"d":1754,"z":70.5,"g":-16.3,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570479.9,"y":5173394.5},{"d":1755,"z":70.0,"g":-16.3,"r":3.8,"grade":3,"gg":3,"rg":3,"e":0,"x":1570480.1,"y":5173396.2},{"d":1760,"z":68.0,"g":-12.6,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570476.4,"y":5173399.6},{"d":1762,"z":67.4,"g":-13.0,"r":3.5,"grade":3,"gg":2,"rg":3,"e":0,"x":1570475.2,"y":5173400.6},{"d":1767,"z":66.7,"g":-16.0,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570470.4,"y":5173399.2},{"d":1772,"z":66.8,"g":-14.1,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570465.6,"y":5173397.8},{"d":1777,"z":66.5,"g":-11.3,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570460.8,"y":5173396.4},{"d":1782,"z":65.8,"g":-5.8,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570456.0,"y":5173395.0},{"d":1787,"z":67.0,"g":-3.8,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570451.2,"y":5173393.6},{"d":1792,"z":65.3,"g":-3.9,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570446.4,"y":5173392.2},{"d":1797,"z":65.7,"g":-5.1,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570441.6,"y":5173390.8},{"d":1802,"z":66.8,"g":-2.9,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570436.8,"y":5173389.4},{"d":1807,"z":67.0,"g":-1.5,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570432.0,"y":5173387.9},{"d":1812,"z":65.5,"g":-6.9,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570427.2,"y":5173386.5},{"d":1817,"z":64.7,"g":-3.2,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570422.4,"y":5173385.1},{"d":1822,"z":64.3,"g":-6.7,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570417.6,"y":5173383.7},{"d":1827,"z":65.1,"g":-9.5,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570412.8,"y":5173382.3},{"d":1832,"z":65.1,"g":-8.4,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570408.0,"y":5173380.9},{"d":1837,"z":63.6,"g":-5.0,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570403.3,"y":5173379.5},{"d":1842,"z":62.8,"g":-5.0,"r":26.3,"grade":1,"gg":1,"rg":1,"e":0,"x":1570398.6,"y":5173378.1},{"d":1847,"z":63.5,"g":-2.5,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570394.2,"y":5173375.8},{"d":1852,"z":62.1,"g":-1.1,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570389.7,"y":5173373.5},{"d":1857,"z":61.6,"g":-2.5,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570385.3,"y":5173371.3},{"d":1862,"z":62.4,"g":-4.5,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570380.8,"y":5173369.0},{"d":1867,"z":62.8,"g":-5.3,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570376.4,"y":5173366.7},{"d":1872,"z":63.4,"g":-3.6,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570371.9,"y":5173364.4},{"d":1876,"z":63.6,"g":-3.6,"r":19.1,"grade":1,"gg":1,"rg":1,"e":0,"x":1570368.0,"y":5173362.4},{"d":1881,"z":63.6,"g":-1.1,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570364.2,"y":5173359.1},{"d":1886,"z":63.6,"g":-2.2,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570360.5,"y":5173355.8},{"d":1891,"z":62.4,"g":-5.0,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570356.7,"y":5173352.5},{"d":1896,"z":59.9,"g":-6.8,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570353.0,"y":5173349.2},{"d":1896,"z":59.9,"g":-6.8,"r":6.3,"grade":1,"gg":1,"rg":1,"e":0,"x":1570352.7,"y":5173349.0},{"d":1901,"z":61.6,"g":-11.0,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570350.7,"y":5173344.4},{"d":1906,"z":61.5,"g":-12.5,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570348.7,"y":5173339.9},{"d":1911,"z":60.4,"g":-14.2,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570346.7,"y":5173335.3},{"d":1912,"z":60.2,"g":-14.2,"r":9.8,"grade":3,"gg":3,"rg":1,"e":0,"x":1570346.3,"y":5173334.6},{"d":1917,"z":59.6,"g":-12.5,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570345.8,"y":5173329.6},{"d":1922,"z":59.0,"g":-8.1,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570345.2,"y":5173324.6},{"d":1927,"z":58.0,"g":-10.9,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570344.6,"y":5173319.7},{"d":1932,"z":57.2,"g":-11.4,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570344.0,"y":5173314.7},{"d":1932,"z":56.7,"g":-11.4,"r":23.9,"grade":2,"gg":2,"rg":1,"e":0,"x":1570344.0,"y":5173314.6},{"d":1937,"z":56.3,"g":-9.5,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570344.0,"y":5173309.6},{"d":1942,"z":56.0,"g":-9.2,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570343.9,"y":5173304.6},{"d":1947,"z":55.8,"g":-8.7,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570343.9,"y":5173299.6},{"d":1952,"z":56.0,"g":-7.6,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570343.8,"y":5173294.6},{"d":1957,"z":55.7,"g":-6.0,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570343.8,"y":5173289.6},{"d":1962,"z":55.4,"g":-5.6,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570343.7,"y":5173284.6},{"d":1967,"z":55.0,"g":-5.3,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570343.7,"y":5173279.6},{"d":1972,"z":54.6,"g":-4.7,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570343.7,"y":5173274.6},{"d":1977,"z":54.2,"g":-4.9,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570343.6,"y":5173269.6},{"d":1982,"z":53.7,"g":-4.1,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570343.6,"y":5173264.6},{"d":1987,"z":53.5,"g":-5.4,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570343.5,"y":5173259.6},{"d":1992,"z":53.4,"g":-5.5,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570343.5,"y":5173254.6},{"d":1995,"z":53.2,"g":-5.5,"r":16.3,"grade":1,"gg":1,"rg":1,"e":0,"x":1570343.5,"y":5173252.4},{"d":2000,"z":53.3,"g":-6.0,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570344.5,"y":5173247.5},{"d":2005,"z":53.4,"g":-4.9,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570345.6,"y":5173242.6},{"d":2010,"z":53.5,"g":-2.3,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570346.6,"y":5173237.7},{"d":2015,"z":52.6,"g":-4.0,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570347.7,"y":5173232.8},{"d":2020,"z":52.1,"g":-4.3,"r":null,"grade":1,"gg":1,"rg":1,"e":0,"x":1570348.8,"y":5173227.9},{"d":2022,"z":52.1,"g":-4.3,"r":38.9,"grade":1,"gg":1,"rg":1,"e":0,"x":1570349.2,"y":5173225.7},{"d":2027,"z":51.3,"g":-7.3,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570349.8,"y":5173220.8},{"d":2032,"z":51.5,"g":-12.4,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570350.4,"y":5173215.8},{"d":2037,"z":52.4,"g":-16.1,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570351.0,"y":5173210.8},{"d":2042,"z":51.4,"g":-13.0,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570351.6,"y":5173205.9},{"d":2047,"z":50.9,"g":-14.0,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570352.2,"y":5173200.9},{"d":2050,"z":50.9,"g":-14.0,"r":5.5,"grade":2,"gg":2,"rg":2,"e":0,"x":1570352.6,"y":5173198.0},{"d":2055,"z":49.3,"g":-15.2,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570349.7,"y":5173193.9},{"d":2057,"z":48.6,"g":-13.2,"r":2.7,"grade":3,"gg":2,"rg":3,"e":0,"x":1570348.6,"y":5173192.4},{"d":2062,"z":46.3,"g":-14.1,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570344.3,"y":5173195.0},{"d":2065,"z":44.5,"g":-17.1,"r":7.5,"grade":3,"gg":3,"rg":1,"e":0,"x":1570341.3,"y":5173196.8},{"d":2070,"z":45.4,"g":-16.6,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570339.1,"y":5173201.3},{"d":2075,"z":44.6,"g":-15.7,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570337.0,"y":5173205.8},{"d":2080,"z":43.2,"g":-16.3,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570334.8,"y":5173210.3},{"d":2085,"z":43.6,"g":-15.2,"r":null,"grade":3,"gg":3,"rg":1,"e":0,"x":1570332.6,"y":5173214.8},{"d":2090,"z":43.3,"g":-11.9,"r":null,"grade":2,"gg":2,"rg":1,"e":0,"x":1570330.4,"y":5173219.3},{"d":2095,"z":42.5,"g":-14.0,"r":null,"grade":2,"gg":2,"rg":1,"e":1,"x":1570328.3,"y":5173223.8},{"d":2100,"z":43.0,"g":-13.7,"r":null,"grade":2,"gg":2,"rg":1,"e":1,"x":1570326.1,"y":5173228.3},{"d":2101,"z":42.2,"g":-13.7,"r":5.6,"grade":2,"gg":2,"rg":2,"e":1,"x":1570325.8,"y":5173229.0},{"d":2106,"z":41.0,"g":-11.9,"r":null,"grade":2,"gg":2,"rg":1,"e":1,"x":1570321.7,"y":5173231.8},{"d":2111,"z":40.3,"g":-15.0,"r":null,"grade":3,"gg":3,"rg":1,"e":1,"x":1570317.5,"y":5173234.6},{"d":2116,"z":38.5,"g":-16.4,"r":null,"grade":3,"gg":3,"rg":1,"e":1,"x":1570313.4,"y":5173237.4},{"d":2118,"z":38.7,"g":-16.4,"r":null,"grade":3,"gg":3,"rg":1,"e":1,"x":1570311.2,"y":5173238.9}],"kml_profile":[{"d":0.0,"z":239.0,"g":-6.4},{"d":46.7,"z":236.0,"g":-16.6},{"d":71.9,"z":236.0,"g":-8.3},{"d":101.9,"z":228.0,"g":-11.1},{"d":126.1,"z":230.0,"g":-10.7},{"d":166.9,"z":222.0,"g":-9.2},{"d":209.1,"z":220.0,"g":-4.7},{"d":272.3,"z":218.0,"g":-7.7},{"d":296.2,"z":217.0,"g":-7.3},{"d":339.9,"z":214.0,"g":-9.1},{"d":385.8,"z":206.0,"g":-10.6},{"d":421.5,"z":201.0,"g":-12.8},{"d":434.3,"z":201.0,"g":-15.7},{"d":444.4,"z":201.0,"g":-53.6},{"d":455.9,"z":201.0,"g":-93.3},{"d":468.8,"z":189.0,"g":-93.3},{"d":477.5,"z":189.0,"g":-93.3},{"d":485.7,"z":189.0,"g":-30.3},{"d":492.9,"z":189.0,"g":32.7},{"d":511.2,"z":195.0,"g":3.7},{"d":528.0,"z":195.0,"g":3.7},{"d":547.7,"z":190.0,"g":-63.6},{"d":566.1,"z":190.0,"g":-111.8},{"d":570.2,"z":182.0,"g":-111.8},{"d":576.7,"z":182.0,"g":-84.8},{"d":584.6,"z":182.0,"g":-84.8},{"d":602.1,"z":187.0,"g":-81.3},{"d":604.4,"z":187.0,"g":-81.3},{"d":608.6,"z":179.0,"g":-39.0},{"d":621.5,"z":179.0,"g":-72.7},{"d":628.1,"z":182.0,"g":-72.8},{"d":632.1,"z":182.0,"g":-13.6},{"d":636.2,"z":179.0,"g":-13.6},{"d":647.6,"z":179.0,"g":-72.8},{"d":650.3,"z":179.0,"g":-145.7},{"d":653.7,"z":179.0,"g":-103.3},{"d":657.9,"z":170.0,"g":-103.3},{"d":683.2,"z":173.0,"g":-103.3},{"d":687.8,"z":173.0,"g":-153.9},{"d":692.0,"z":173.0,"g":-121.7},{"d":695.9,"z":163.0,"g":-133.0},{"d":701.0,"z":163.0,"g":-77.7},{"d":710.2,"z":162.0,"g":-73.2},{"d":734.5,"z":170.0,"g":-12.5},{"d":747.9,"z":162.0,"g":-12.5},{"d":754.4,"z":162.0,"g":-13.4},{"d":771.3,"z":162.0,"g":-47.0},{"d":794.0,"z":162.0,"g":-9.2},{"d":814.4,"z":155.0,"g":8.4},{"d":833.3,"z":158.0,"g":-7.6},{"d":849.4,"z":165.0,"g":-5.3},{"d":867.4,"z":155.0,"g":4.8},{"d":893.5,"z":156.0,"g":-12.6},{"d":918.2,"z":160.0,"g":-11.6},{"d":946.3,"z":140.0,"g":-0.6},{"d":960.7,"z":147.0,"g":-2.1},{"d":967.5,"z":147.0,"g":-48.0},{"d":972.6,"z":147.0,"g":-28.5},{"d":978.4,"z":140.0,"g":-48.4},{"d":1002.3,"z":137.0,"g":-35.2},{"d":1029.6,"z":134.0,"g":-17.3},{"d":1053.5,"z":135.0,"g":-6.8},{"d":1088.4,"z":154.0,"g":-5.3},{"d":1101.4,"z":145.0,"g":-23.9},{"d":1110.4,"z":145.0,"g":-33.3},{"d":1123.3,"z":134.0,"g":-77.1},{"d":1143.8,"z":134.0,"g":-50.7},{"d":1151.9,"z":134.0,"g":-50.7},{"d":1176.7,"z":130.0,"g":-107.3},{"d":1183.5,"z":130.0,"g":-107.3},{"d":1190.1,"z":117.0,"g":-64.0},{"d":1200.2,"z":117.0,"g":-88.0},{"d":1213.5,"z":120.0,"g":-88.0},{"d":1232.2,"z":120.0,"g":-108.1},{"d":1240.7,"z":120.0,"g":-108.1},{"d":1245.3,"z":109.0,"g":-87.7},{"d":1255.8,"z":109.0,"g":-65.3},{"d":1273.2,"z":120.0,"g":-84.0},{"d":1287.7,"z":117.0,"g":-32.5},{"d":1294.1,"z":108.0,"g":-27.3},{"d":1299.0,"z":108.0,"g":-57.5},{"d":1358.9,"z":101.0,"g":-75.9},{"d":1367.8,"z":101.0,"g":1.6},{"d":1377.2,"z":101.0,"g":14.7},{"d":1404.3,"z":105.0,"g":14.5},{"d":1431.1,"z":116.0,"g":13.5},{"d":1463.1,"z":112.0,"g":13.5},{"d":1482.1,"z":114.0,"g":-57.0},{"d":1489.9,"z":114.0,"g":-71.7},{"d":1494.0,"z":103.0,"g":-62.7},{"d":1510.9,"z":100.0,"g":-69.9},{"d":1532.2,"z":105.0,"g":-69.9},{"d":1624.7,"z":88.0,"g":-26.8},{"d":1628.1,"z":88.0,"g":-29.8},{"d":1635.5,"z":81.0,"g":-16.6},{"d":1642.4,"z":81.0,"g":-7.7},{"d":1651.9,"z":87.0,"g":-7.7},{"d":1748.6,"z":95.0,"g":-21.8},{"d":1755.3,"z":95.0,"g":-17.0},{"d":1761.9,"z":86.0,"g":-41.5},{"d":1841.7,"z":84.0,"g":-58.1},{"d":1876.1,"z":72.0,"g":-42.0},{"d":1896.4,"z":72.0,"g":-17.7},{"d":1912.3,"z":73.0,"g":-19.1},{"d":1932.4,"z":65.0,"g":-7.6},{"d":1994.6,"z":60.0,"g":-8.9},{"d":2021.8,"z":63.0,"g":-12.8},{"d":2049.8,"z":59.0,"g":-20.4},{"d":2056.7,"z":59.0,"g":-16.3},{"d":2065.2,"z":53.0,"g":-31.9},{"d":2100.8,"z":56.0,"g":-37.7},{"d":2118.5,"z":47.0,"g":-37.7}]};
+
+(function () {
+  "use strict";
+
+  const S = DATA.summary;
+  const ST = DATA.stations;
+  const CORE = ST.filter(s => !s.e);
+  const GRADES = DATA.grades;
+  const SPACING = S.spacing_m;
+
+  const gradeColor = n => `var(--g${n})`;
+  const gradeName = n => (GRADES.find(g => g.n === n) || {}).name || "—";
+  const deg = pct => Math.atan(Math.abs(pct) / 100) * 180 / Math.PI;
+  const fmt = (v, d) => v.toFixed(d === undefined ? 1 : d);
+  const el = id => document.getElementById(id);
+
+  const SVGNS = "http://www.w3.org/2000/svg";
+  function mk(tag, attrs, parent) {
+    const n = document.createElementNS(SVGNS, tag);
+    for (const k in attrs) n.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(n);
+    return n;
+  }
+  function txt(x, y, s, cls, parent, extra) {
+    const t = mk("text", Object.assign({ x: x, y: y, class: cls }, extra || {}), parent);
+    t.textContent = s;
+    return t;
+  }
+
+  /* ---------------- grade roll-up ---------------- */
+
+  const avgPct = CORE.reduce((a, s) => a + s.g, 0) / CORE.length;
+  const avgDeg = deg(avgPct);
+
+  function exceptionGrade() {
+    for (const g of GRADES) {
+      if (g.max_deg === null) return { g: g, over: 0, under: 0 };
+      if (avgDeg > g.avg_deg) continue;
+      const over = CORE.filter(s => deg(s.g) > g.max_deg).length / CORE.length * 100;
+      if (over > g.exc) continue;
+      const under = CORE.filter(s => s.r !== null && s.r < g.radius).length / CORE.length * 100;
+      if (under > g.exc) continue;
+      return { g: g, over: over, under: under };
+    }
+    return { g: GRADES[5], over: 0, under: 0 };
+  }
+
+  const EX = exceptionGrade();
+  const strictGrade = S.overall_grade;
+
+  /* ---------------- title block + verdict ---------------- */
+
+  el("f-date").textContent = new Date().toLocaleDateString("en-NZ",
+    { day: "numeric", month: "short", year: "numeric" });
+
+  el("verdict-badge").style.background = gradeColor(EX.g.n);
+  el("v-num").textContent = EX.g.n;
+  el("v-name").textContent = EX.g.name;
+
+  el("v-lede").innerHTML =
+    `Askins audits as <strong>Grade ${EX.g.n} — ${EX.g.name}</strong>, which is what it is signposted as. ` +
+    `Its average gradient of ${fmt(Math.abs(avgPct))}% (${fmt(avgDeg)}°) sits inside the Grade ${EX.g.n} ceiling of ` +
+    `${fmt(EX.g.avg_deg)}°, and only ${fmt(EX.over)}% of its length exceeds the Grade ${EX.g.n} peak of ${fmt(EX.g.max_deg)}° — ` +
+    `well under the ${EX.g.exc}% the guidelines allow.`;
+
+  el("v-detail").innerHTML =
+    `Judged station by station with no allowance at all, the worst single stretch reaches ` +
+    `<strong>Grade ${strictGrade} — ${gradeName(strictGrade)}</strong>. That is the honest ceiling, not the trail's grade: ` +
+    `the guidelines exist precisely because a short pitch above the line does not re-grade a trail. ` +
+    `Both numbers are reported so a builder can see the difference and go look at the sections listed below.`;
+
+  const checks = [
+    `Average gradient ${fmt(avgDeg)}° ≤ ${fmt(EX.g.avg_deg)}°`,
+    `Over-peak length ${fmt(EX.over)}% ≤ ${EX.g.exc}%`,
+    `Under-radius length ${fmt(EX.under)}% ≤ ${EX.g.exc}%`,
+    `Tightest turn ${fmt(S.min_radius_m)} m ≥ ${fmt(EX.g.radius)} m`
+  ];
+  el("v-checks").innerHTML = checks.map(c => `<span>${c}</span>`).join("");
+
+  /* ---------------- stat tiles ---------------- */
+
+  const tiles = [
+    ["Length", S.length_m.toLocaleString(), "m", `${S.core_stations} stations assessed`],
+    ["Descent", fmt(S.descent_m), "m", `${fmt(S.start_z)} → ${fmt(S.end_z)} m`],
+    ["Average gradient", fmt(Math.abs(avgPct)), "%", `${fmt(avgDeg)}° descending`],
+    ["Steepest 50 m", fmt(Math.abs(S.max_descent_pct)), "%", `at ${S.max_descent_at_m} m`],
+    ["Tightest turn", fmt(S.min_radius_m), "m", `at ${S.min_radius_at_m} m`],
+    ["Climbing", fmt(S.gradient_bands.uphill * 100, 0), "%", "of length gains height"]
+  ];
+  el("stats").innerHTML = tiles.map(t =>
+    `<div class="stat"><dt>${t[0]}</dt><dd>${t[1]}<span class="u">${t[2]}</span></dd><div class="sub">${t[3]}</div></div>`
+  ).join("");
+
+  /* ---------------- thresholds table ---------------- */
+
+  el("thresh-table").querySelector("tbody").innerHTML = GRADES.map(g => {
+    const hit = g.n === EX.g.n ? ' class="hit"' : "";
+    const cell = v => v === null ? "—" : v;
+    return `<tr${hit}>
+      <td><span class="swatch" style="background:${gradeColor(g.n)}"></span>${g.n} · ${g.name}</td>
+      <td>${g.avg_deg === null ? "—" : fmt(g.avg_deg) + "°"}</td>
+      <td>${g.max_deg === null ? "—" : fmt(g.max_deg) + "°"}</td>
+      <td>${cell(g.exc === null ? null : g.exc + "%")}</td>
+      <td>${fmt(g.radius)} m</td>
+    </tr>`;
+  }).join("");
+
+  /* ---------------- shared hover state ---------------- */
+
+  const listeners = [];
+  let active = -1;
+  function setActive(i) {
+    if (i === active) return;
+    active = i;
+    listeners.forEach(fn => fn(i));
+  }
+
+  /* ---------------- plan view ---------------- */
+
+  const planSvg = el("plan");
+  const PW = 1000, PH = 470, PPAD = { t: 26, r: 26, b: 54, l: 26 };
+  (function drawPlan() {
+    const xs = ST.map(s => s.x), ys = ST.map(s => s.y);
+    const x0 = Math.min(...xs), x1 = Math.max(...xs);
+    const y0 = Math.min(...ys), y1 = Math.max(...ys);
+    const availW = PW - PPAD.l - PPAD.r, availH = PH - PPAD.t - PPAD.b;
+    const k = Math.min(availW / (x1 - x0), availH / (y1 - y0));
+    const offX = PPAD.l + (availW - (x1 - x0) * k) / 2;
+    const offY = PPAD.t + (availH - (y1 - y0) * k) / 2;
+    const px = s => offX + (s.x - x0) * k;
+    const py = s => offY + (y1 - s.y) * k;
+
+    // a soft cast of the whole line, so the shape reads even where grades alternate
+    const halo = mk("path", {
+      d: ST.map((s, i) => (i ? "L" : "M") + fmt(px(s), 1) + " " + fmt(py(s), 1)).join(" "),
+      fill: "none", stroke: "var(--grid)", "stroke-width": 9,
+      "stroke-linecap": "round", "stroke-linejoin": "round"
+    }, planSvg);
+
+    // consecutive runs of equal grade, drawn as one polyline each
+    let run = [ST[0]];
+    for (let i = 1; i <= ST.length; i++) {
+      const s = ST[i];
+      if (s && s.grade === run[run.length - 1].grade) { run.push(s); continue; }
+      const pts = run.map(p => fmt(px(p), 1) + "," + fmt(py(p), 1)).join(" ");
+      mk("polyline", {
+        points: pts, fill: "none", stroke: gradeColor(run[run.length - 1].grade),
+        "stroke-width": 4.5, "stroke-linecap": "round", "stroke-linejoin": "round"
+      }, planSvg);
+      if (s) run = [ST[i - 1], s];
+    }
+
+    // start / finish
+    const A = ST[0], B = ST[ST.length - 1];
+    mk("circle", { cx: px(A), cy: py(A), r: 5.5, fill: "var(--surface)", stroke: "var(--ink)", "stroke-width": 2 }, planSvg);
+    txt(px(A) + 11, py(A) + 4, "Top · 233 m", "marklabel", planSvg);
+    mk("circle", { cx: px(B), cy: py(B), r: 5.5, fill: "var(--ink)" }, planSvg);
+    txt(px(B) + 11, py(B) + 4, "Bottom · 39 m", "marklabel", planSvg);
+
+    // hover marker
+    const cursor = mk("circle", {
+      cx: -99, cy: -99, r: 6, fill: "var(--surface)", stroke: "var(--ink)",
+      "stroke-width": 2.5, "pointer-events": "none"
+    }, planSvg);
+
+    // scale bar — 200 m
+    const barLen = 200 * k, bx = PPAD.l + 6, by = PH - 30;
+    mk("line", { x1: bx, y1: by, x2: bx + barLen, y2: by, stroke: "var(--ink-2)", "stroke-width": 2 }, planSvg);
+    mk("line", { x1: bx, y1: by - 4, x2: bx, y2: by + 4, stroke: "var(--ink-2)", "stroke-width": 2 }, planSvg);
+    mk("line", { x1: bx + barLen, y1: by - 4, x2: bx + barLen, y2: by + 4, stroke: "var(--ink-2)", "stroke-width": 2 }, planSvg);
+    txt(bx, by + 18, "200 m · NZTM2000", "tick", planSvg);
+
+    // north arrow
+    const nx = PW - PPAD.r - 14, ny = PH - 52;
+    mk("path", { d: `M${nx} ${ny} L${nx} ${ny - 30}`, stroke: "var(--ink-2)", "stroke-width": 2 }, planSvg);
+    mk("path", { d: `M${nx - 5} ${ny - 22} L${nx} ${ny - 32} L${nx + 5} ${ny - 22} Z`, fill: "var(--ink-2)" }, planSvg);
+    txt(nx, ny + 14, "N", "tick", planSvg, { "text-anchor": "middle" });
+
+    // pointer picking against the projected points
+    const hit = mk("rect", { x: 0, y: 0, width: PW, height: PH, fill: "transparent" }, planSvg);
+    const proj = ST.map(s => [px(s), py(s)]);
+    hit.addEventListener("pointermove", ev => {
+      const pt = planSvg.createSVGPoint();
+      pt.x = ev.clientX; pt.y = ev.clientY;
+      const loc = pt.matrixTransform(planSvg.getScreenCTM().inverse());
+      let best = -1, bd = Infinity;
+      for (let i = 0; i < proj.length; i++) {
+        const dx = proj[i][0] - loc.x, dy = proj[i][1] - loc.y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < bd) { bd = d2; best = i; }
+      }
+      setActive(bd < 900 ? best : -1);
+    });
+    hit.addEventListener("pointerleave", () => setActive(-1));
+
+    const tip = el("plan-tip");
+    listeners.push(i => {
+      if (i < 0) { cursor.setAttribute("cx", -99); tip.classList.remove("on"); return; }
+      cursor.setAttribute("cx", proj[i][0]);
+      cursor.setAttribute("cy", proj[i][1]);
+      tip.classList.add("on");
+      tip.innerHTML = tipHtml(ST[i]);
+      const box = planSvg.getBoundingClientRect();
+      const sx = box.width / PW, sy = box.height / PH;
+      const left = Math.min(Math.max(proj[i][0] * sx + 14, 4), box.width - 175);
+      tip.style.left = left + "px";
+      tip.style.top = Math.max(proj[i][1] * sy - 60, 4) + "px";
+    });
+  })();
+
+  function tipHtml(s) {
+    return `<div class="th">Chainage ${s.d} m</div>
+      <div class="row"><span>Elevation</span><b>${fmt(s.z)} m</b></div>
+      <div class="row"><span>Gradient</span><b>${fmt(s.g)} %</b></div>
+      <div class="row"><span>Turn radius</span><b>${s.r === null ? "straight" : fmt(s.r) + " m"}</b></div>
+      <div class="gpill" style="background:${gradeColor(s.grade)}">Grade ${s.grade} · ${gradeName(s.grade)}</div>
+      ${s.e ? '<div class="th" style="margin:6px 0 0">Part-filled window — excluded</div>' : ""}`;
+  }
+
+  /* ---------------- long section ---------------- */
+
+  const profSvg = el("profile");
+  (function drawProfile() {
+    const W = 1000, H = 420;
+    const L = 58, R = 22;
+    const elevTop = 20, elevH = 168;
+    const gradTop = 236, gradH = 132;
+    const xMax = ST[ST.length - 1].d;
+    const X = d => L + (d / xMax) * (W - L - R);
+
+    const zs = ST.map(s => s.z);
+    const zMin = Math.floor(Math.min(...zs) / 20) * 20;
+    const zMax = Math.ceil(Math.max(...zs) / 20) * 20;
+    const Z = z => elevTop + elevH - ((z - zMin) / (zMax - zMin)) * elevH;
+
+    const gAbs = Math.max(30, Math.ceil(Math.max(...ST.map(s => Math.abs(s.g))) / 5) * 5);
+    const G = g => gradTop + gradH / 2 - (g / gAbs) * (gradH / 2);
+
+    // --- shared x gridlines + ticks
+    const xTicks = [];
+    for (let d = 0; d <= xMax; d += 250) xTicks.push(d);
+    xTicks.forEach(d => {
+      mk("line", { x1: X(d), y1: elevTop, x2: X(d), y2: elevTop + elevH, class: "gridline" }, profSvg);
+      mk("line", { x1: X(d), y1: gradTop, x2: X(d), y2: gradTop + gradH, class: "gridline" }, profSvg);
+      txt(X(d), gradTop + gradH + 20, d.toLocaleString(), "tick", profSvg, { "text-anchor": "middle" });
+    });
+    txt(W - R, gradTop + gradH + 38, "Chainage, metres from top", "axlabel", profSvg, { "text-anchor": "end" });
+
+    // --- elevation plot
+    for (let z = zMin; z <= zMax; z += 40) {
+      mk("line", { x1: L, y1: Z(z), x2: W - R, y2: Z(z), class: "gridline" }, profSvg);
+      txt(L - 10, Z(z) + 3.5, z, "tick", profSvg, { "text-anchor": "end" });
+    }
+    txt(L, elevTop - 8, "Ground elevation, metres", "axlabel", profSvg);
+
+    const area = ST.map(s => `${fmt(X(s.d), 1)} ${fmt(Z(s.z), 1)}`).join(" L ");
+    mk("path", {
+      d: `M ${fmt(X(0), 1)} ${elevTop + elevH} L ${area} L ${fmt(X(xMax), 1)} ${elevTop + elevH} Z`,
+      fill: "var(--surface-2)"
+    }, profSvg);
+    mk("path", {
+      d: "M " + area, fill: "none", stroke: "var(--ink-3)", "stroke-width": 1.5,
+      "stroke-linejoin": "round"
+    }, profSvg);
+
+    // --- gradient plot, thin bars coloured by grade
+    mk("line", { x1: L, y1: G(0), x2: W - R, y2: G(0), class: "baseline" }, profSvg);
+    [-20, -10, 10].forEach(v => {
+      mk("line", { x1: L, y1: G(v), x2: W - R, y2: G(v), class: "gridline" }, profSvg);
+      txt(L - 10, G(v) + 3.5, v > 0 ? "+" + v : v, "tick", profSvg, { "text-anchor": "end" });
+    });
+    txt(L - 10, G(0) + 3.5, "0", "tick", profSvg, { "text-anchor": "end" });
+    txt(L, gradTop - 8, "Gradient, per cent — 50 m smoothed", "axlabel", profSvg);
+
+    const bw = Math.max(1.1, (W - L - R) / ST.length - 0.6);
+    ST.forEach(s => {
+      const y = G(s.g), y0 = G(0);
+      mk("rect", {
+        x: fmt(X(s.d) - bw / 2, 2), y: fmt(Math.min(y, y0), 2),
+        width: fmt(bw, 2), height: fmt(Math.max(Math.abs(y - y0), 0.6), 2),
+        fill: gradeColor(s.grade), opacity: s.e ? 0.3 : 1
+      }, profSvg);
+    });
+
+    // extremes, direct-labelled
+    const steep = CORE.reduce((a, s) => s.g < a.g ? s : a, CORE[0]);
+    mk("circle", { cx: X(steep.d), cy: G(steep.g), r: 3.5, fill: "none", stroke: "var(--ink)", "stroke-width": 1.5 }, profSvg);
+    txt(X(steep.d) + 9, G(steep.g) + 4, `steepest ${fmt(steep.g)}%`, "marklabel", profSvg);
+
+    const tight = CORE.filter(s => s.r !== null).reduce((a, s) => s.r < a.r ? s : a, CORE.filter(s => s.r !== null)[0]);
+    mk("line", { x1: X(tight.d), y1: elevTop, x2: X(tight.d), y2: elevTop + elevH, stroke: "var(--ink-3)", "stroke-width": 1 }, profSvg);
+    txt(X(tight.d) + 7, elevTop + 14, `tightest turn ${fmt(tight.r)} m`, "marklabel", profSvg);
+
+    // --- crosshair + picking
+    const cross = mk("g", { "pointer-events": "none" }, profSvg);
+    const vline = mk("line", { x1: -9, y1: elevTop, x2: -9, y2: gradTop + gradH, stroke: "var(--ink)", "stroke-width": 1 }, cross);
+    const dotZ = mk("circle", { cx: -9, cy: -9, r: 4, fill: "var(--surface)", stroke: "var(--ink)", "stroke-width": 2 }, cross);
+    const dotG = mk("circle", { cx: -9, cy: -9, r: 4, fill: "var(--surface)", stroke: "var(--ink)", "stroke-width": 2 }, cross);
+    cross.style.opacity = 0;
+
+    const hit = mk("rect", {
+      x: L, y: elevTop, width: W - L - R, height: gradTop + gradH - elevTop, fill: "transparent"
+    }, profSvg);
+    function pick(clientX) {
+      const pt = profSvg.createSVGPoint();
+      pt.x = clientX; pt.y = 0;
+      const loc = pt.matrixTransform(profSvg.getScreenCTM().inverse());
+      const d = (loc.x - L) / (W - L - R) * xMax;
+      let idx = Math.round(d / SPACING);
+      setActive(Math.max(0, Math.min(ST.length - 1, idx)));
+    }
+    hit.addEventListener("pointermove", ev => pick(ev.clientX));
+    hit.addEventListener("pointerleave", () => setActive(-1));
+
+    profSvg.addEventListener("keydown", ev => {
+      const k = ev.key;
+      if (k === "ArrowRight" || k === "ArrowLeft") {
+        setActive(Math.max(0, Math.min(ST.length - 1, (active < 0 ? 0 : active) + (k === "ArrowRight" ? 1 : -1))));
+        ev.preventDefault();
+      } else if (k === "Home") { setActive(0); ev.preventDefault(); }
+      else if (k === "End") { setActive(ST.length - 1); ev.preventDefault(); }
+      else if (k === "Escape") { setActive(-1); }
+    });
+
+    const tip = el("profile-tip");
+    listeners.push(i => {
+      if (i < 0) { cross.style.opacity = 0; tip.classList.remove("on"); return; }
+      const s = ST[i];
+      cross.style.opacity = 1;
+      vline.setAttribute("x1", X(s.d)); vline.setAttribute("x2", X(s.d));
+      dotZ.setAttribute("cx", X(s.d)); dotZ.setAttribute("cy", Z(s.z));
+      dotG.setAttribute("cx", X(s.d)); dotG.setAttribute("cy", G(s.g));
+      tip.classList.add("on");
+      tip.innerHTML = tipHtml(s);
+      const box = profSvg.getBoundingClientRect();
+      const sx = box.width / W;
+      tip.style.left = Math.min(Math.max(X(s.d) * sx + 14, 4), box.width - 180) + "px";
+      tip.style.top = "8px";
+    });
+  })();
+
+  /* ---------------- grade legend + distribution ---------------- */
+
+  const distCounts = S.grade_distribution;
+  const maxCount = Math.max(...Object.values(distCounts));
+
+  el("grade-legend").innerHTML =
+    '<span class="key n" style="margin-right:2px">Assessed grade</span>' +
+    GRADES.map(g => {
+      const c = distCounts[g.n] || 0;
+      return `<span class="key"><i style="background:${gradeColor(g.n)}"></i>${g.n} · ${g.name}
+        <span class="n">${(c * SPACING).toLocaleString()} m</span></span>`;
+    }).join("");
+
+  el("dist").innerHTML = GRADES.map(g => {
+    const c = distCounts[g.n] || 0;
+    const pct = c / S.core_stations * 100;
+    const w = maxCount ? (c / maxCount) * 100 : 0;
+    return `<div class="dist-row">
+      <div class="nm"><span class="swatch" style="background:${gradeColor(g.n)}"></span>${g.n} · ${g.name}</div>
+      <div class="dist-track"><div class="dist-fill" style="width:${w}%;background:${gradeColor(g.n)}"></div></div>
+      <div class="val">${(c * SPACING).toLocaleString()} m · ${fmt(pct)}%</div>
+    </div>`;
+  }).join("");
+
+  /* ---------------- flagged runs ---------------- */
+
+  const runs = [];
+  let cur = null;
+  CORE.forEach(s => {
+    if (s.grade > 3) {
+      if (cur && s.d - cur.end <= SPACING) { cur.end = s.d; cur.max = Math.max(cur.max, s.grade); cur.rows.push(s); }
+      else { cur = { start: s.d, end: s.d, max: s.grade, rows: [s] }; runs.push(cur); }
+    } else { cur = null; }
+  });
+  runs.sort((a, b) => b.max - a.max || (b.end - b.start) - (a.end - a.start));
+
+  el("flags").querySelector("tbody").innerHTML = runs.map(r => {
+    const byGrad = r.rows.some(s => s.gg === r.max);
+    const byRad = r.rows.some(s => s.rg === r.max);
+    const worstG = r.rows.reduce((a, s) => Math.abs(s.g) > Math.abs(a.g) ? s : a, r.rows[0]);
+    const withR = r.rows.filter(s => s.r !== null);
+    const worstR = withR.length ? withR.reduce((a, s) => s.r < a.r ? s : a, withR[0]) : null;
+    const cause = [
+      byGrad ? `gradient to ${fmt(worstG.g)}%` : null,
+      byRad && worstR ? `radius to ${fmt(worstR.r)} m` : null
+    ].filter(Boolean).join(", ");
+    return `<tr>
+      <td>${r.start}–${r.end + SPACING} m</td>
+      <td>${r.end - r.start + SPACING} m</td>
+      <td><span class="pill" style="background:${gradeColor(r.max)}">${r.max}</span></td>
+      <td class="cause">${cause}</td>
+    </tr>`;
+  }).join("");
+
+  const flagLen = runs.reduce((a, r) => a + (r.end - r.start + SPACING), 0);
+  el("flags-note").textContent =
+    `${runs.length} runs, ${flagLen} m total — ${fmt(flagLen / S.length_m * 100)}% of the trail. ` +
+    `The guidelines allow ${EX.g.exc}% at Grade ${EX.g.n}.`;
+
+  /* ---------------- station table ---------------- */
+
+  el("station-table").querySelector("tbody").innerHTML = ST.map(s =>
+    `<tr><td>${s.d}</td><td>${fmt(s.z)}</td><td>${fmt(s.g)}</td>
+     <td>${s.r === null ? "straight" : fmt(s.r)}</td><td>${s.grade}</td>
+     <td>${s.e ? "part-filled" : "full"}</td></tr>`
+  ).join("");
+
+  /* ---------------- GPS vs LiDAR ---------------- */
+
+  (function drawCmp() {
+    const svg = el("cmp");
+    const W = 1000, H = 260, L = 52, R = 90, T = 22, B = 44;
+    const K = DATA.kml_profile;
+    const xMax = ST[ST.length - 1].d;
+    const X = d => L + (d / xMax) * (W - L - R);
+    const all = K.map(k => k.z).concat(ST.map(s => s.z));
+    const zMin = Math.floor(Math.min(...all) / 20) * 20;
+    const zMax = Math.ceil(Math.max(...all) / 20) * 20;
+    const Y = z => T + (H - T - B) - ((z - zMin) / (zMax - zMin)) * (H - T - B);
+
+    for (let z = zMin; z <= zMax; z += 50) {
+      mk("line", { x1: L, y1: Y(z), x2: W - R, y2: Y(z), class: "gridline" }, svg);
+      txt(L - 10, Y(z) + 3.5, z, "tick", svg, { "text-anchor": "end" });
+    }
+    for (let d = 0; d <= xMax; d += 500) {
+      txt(X(d), H - B + 22, d.toLocaleString(), "tick", svg, { "text-anchor": "middle" });
+    }
+    txt(L, T - 8, "Elevation, metres", "axlabel", svg);
+    txt(W - R, H - B + 38, "Chainage, metres", "axlabel", svg, { "text-anchor": "end" });
+
+    const line = (pts, colour) => mk("path", {
+      d: "M " + pts.map(p => `${fmt(X(p.d), 1)} ${fmt(Y(p.z), 1)}`).join(" L "),
+      fill: "none", stroke: colour, "stroke-width": 2, "stroke-linejoin": "round"
+    }, svg);
+    line(K, "var(--cmp-b)");
+    line(ST, "var(--cmp-a)");
+
+    const kEnd = K[K.length - 1], sEnd = ST[ST.length - 1];
+    txt(W - R + 8, Y(kEnd.z) - 4, "GPS", "marklabel", svg).setAttribute("fill", "var(--cmp-b)");
+    txt(W - R + 8, Y(sEnd.z) + 14, "LiDAR", "marklabel", svg).setAttribute("fill", "var(--cmp-a)");
+
+    // mean offset between the two, sampled at the KML vertices
+    let sum = 0;
+    K.forEach(k => {
+      const i = Math.min(ST.length - 1, Math.round(k.d / SPACING));
+      sum += k.z - ST[i].z;
+    });
+    const bias = sum / K.length;
+    el("cmp-bias").textContent = `Mean offset ${fmt(bias)} m — the GPS reads high the whole way down`;
+  })();
+})();
+</script>
+
+</body>
+</html>

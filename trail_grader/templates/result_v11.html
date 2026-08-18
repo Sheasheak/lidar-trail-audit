@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ r.trail_name }} — LiDAR Trail Audit</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='audit.css') }}">
+</head>
+<body>
+<div class="sheet wide">
+
+  <header class="titleblock">
+    <p class="eyebrow">
+      <span>LiDAR Trail Audit</span>
+      <span>v11 pipeline · live LINZ elevation</span>
+      <a href="{{ url_for('index') }}">← Run another trail</a>
+    </p>
+    <h1>{{ r.trail_name }}</h1>
+    <p class="subtitle">
+      {{ r.trail_length_m|round|int }} m sampled at 1 m spacing, gradient smoothed over {{ r.window }} m,
+      graded against the NZ MTB Trail Design &amp; Construction Guidelines.
+    </p>
+    <dl class="fields">
+      <div class="field"><dt>Stated grade</dt><dd>{{ r.stated_grade }} — {{ grade_colours[r.stated_grade] }}</dd></div>
+      <div class="field"><dt>Length</dt><dd>{{ r.trail_length_m|round|int }} m</dd></div>
+      <div class="field"><dt>Corners found</dt><dd>{{ r.n_corners }}</dd></div>
+      <div class="field"><dt>Run</dt><dd>{{ r.run_at }}</dd></div>
+    </dl>
+  </header>
+
+  <dl class="stats">
+    <div class="stat"><dt>Average gradient</dt><dd>{{ r.avg_gradient }}<span class="u">%</span></dd></div>
+    <div class="stat"><dt>Steepest (50m smooth)</dt><dd>{{ r.worst_gradient }}<span class="u">%</span></dd></div>
+    <div class="stat"><dt>Tightest corner</dt><dd>{{ r.tightest_corner if r.tightest_corner is not none else "—" }}<span class="u">m</span></dd></div>
+    <div class="stat"><dt>Under stated min radius</dt><dd>{{ r.pct_under_stated_min }}<span class="u">%</span></dd></div>
+    <div class="stat"><dt>Mean cross-slope</dt><dd>{{ r.mean_abs_sideslope if r.mean_abs_sideslope is not none else "—" }}<span class="u">°</span></dd></div>
+    <div class="stat"><dt>Steep sideslope (≥30°)</dt><dd>{{ r.pct_steep_sideslope if r.pct_steep_sideslope is not none else "—" }}<span class="u">%</span></dd></div>
+    <div class="stat"><dt>Corners found</dt><dd>{{ r.n_corners }}</dd></div>
+  </dl>
+
+  <p class="sec-note" style="color:var(--ink-3);font-size:13px;margin:22px 0 0">
+    LiDAR sub-grades — gradient {{ r.gradient_grade }} ({{ r.gradient_reason }}), corners {{ r.radius_grade }}
+    ({{ r.radius_reason }}). Answer the questions below and let Claude settle the final grade.
+  </p>
+
+  <!-- ================= QUESTIONS + AI GRADING ================= -->
+  <section class="card" id="ai-summary-card" style="margin-top:14px">
+    <h3>Grade this trail</h3>
+    <p class="card-sub">Claude combines the LiDAR figures above with your field observations to settle the final
+      grade, then writes a summary and recommendation for a trail manager. Uses only the computed numbers —
+      nothing invented.</p>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px">
+      <input type="password" id="ai-api-key" placeholder="sk-ant-… (Anthropic API key)"
+             style="flex:1;padding:6px 10px;font-size:12px;font-family:var(--mono, monospace);border:1px solid var(--hairline);border-radius:4px">
+      <label style="font-size:11px;color:var(--ink-3);white-space:nowrap"><input type="checkbox" id="ai-api-key-remember" checked style="vertical-align:middle"> remember</label>
+    </div>
+
+    <p class="card-sub" style="margin-bottom:8px">Field observations — LiDAR can't see these, so answer if you've ridden it:</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">
+      <div>
+        <label style="display:block;font-size:11px;font-weight:600;margin-bottom:4px">Tread obstacles</label>
+        <select id="field-obstacles" style="width:100%;padding:5px;font-size:12px;border:1px solid var(--hairline);border-radius:4px">
+          <option value="">— not observed —</option>
+          <option value="0">None</option>
+          <option value="1">Up to 50mm</option>
+          <option value="2">Up to 100mm</option>
+          <option value="3">Up to 200mm</option>
+          <option value="4">Up to 600mm</option>
+          <option value="5">No limit / bigger</option>
+        </select>
+      </div>
+      <div>
+        <label style="display:block;font-size:11px;font-weight:600;margin-bottom:4px">Trail surface</label>
+        <select id="field-surface" style="width:100%;padding:5px;font-size:12px;border:1px solid var(--hairline);border-radius:4px">
+          <option value="">— not observed —</option>
+          <option value="0">Hardened and smooth (sealed)</option>
+          <option value="1">Firm and stable (compacted gravel)</option>
+          <option value="2">Mostly stable, some loose sections</option>
+          <option value="3">Generally firm but loose/broken in places</option>
+          <option value="4">Highly variable — natural surface, mud, ruts</option>
+        </select>
+      </div>
+      <div>
+        <label style="display:block;font-size:11px;font-weight:600;margin-bottom:4px">Technical features (jumps, drops)</label>
+        <select id="field-features" style="width:100%;padding:5px;font-size:12px;border:1px solid var(--hairline);border-radius:4px">
+          <option value="">— not observed —</option>
+          <option value="0">All rollable — no jumps or drops</option>
+          <option value="1">Rollable — stepped drops up to 200mm</option>
+          <option value="2">Rollable — stepped drops up to 400mm, small tabletops</option>
+          <option value="3">Mostly rollable — drops up to 600mm, gap jumps with B-lines</option>
+          <option value="4">Stepped drops up to 1.5m, large jumps</option>
+          <option value="5">No limits</option>
+        </select>
+      </div>
+    </div>
+
+    <button type="button" class="ghost" id="ai-summary-btn">Generate grade</button>
+    <p class="hint mono" id="ai-summary-status" style="color:var(--ink-3);font-size:11px;margin-top:8px"></p>
+  </section>
+
+  <!-- ================= VERDICT (populated by AI grade) ================= -->
+  <div class="verdict" id="verdict" style="display:none;margin-top:24px">
+    <div class="verdict-badge" id="verdict-badge">
+      <div class="lbl" id="verdict-lbl">Measured grade</div>
+      <div class="num" id="verdict-num"></div>
+      <div class="nm" id="verdict-nm"></div>
+    </div>
+    <div class="verdict-body">
+      <div id="verdict-mismatch"></div>
+      <p>Gradient grade {{ r.gradient_grade }} — {{ r.gradient_reason }}</p>
+      <p>Corner grade {{ r.radius_grade }} — {{ r.radius_reason }}</p>
+    </div>
+  </div>
+
+  <!-- ================= AI SUMMARY ================= -->
+  <section class="card" id="ai-summary-text-card" style="margin-top:24px;display:none">
+    <h3>Plain-language summary</h3>
+    <div id="ai-summary-text" style="white-space:pre-wrap;font-size:14px;line-height:1.6"></div>
+  </section>
+
+  <!-- ================= AI RECOMMENDATION (separate box) ================= -->
+  <section class="card" id="ai-recommendation-card" style="margin-top:24px;display:none">
+    <h3>Recommendation</h3>
+    <div id="ai-recommendation-text" style="white-space:pre-wrap;font-size:14px;line-height:1.6"></div>
+  </section>
+
+  <!-- ================= 3D ================= -->
+  <section>
+    <div class="sec-head">
+      <h2>3D terrain</h2>
+      <div class="note">Fetches a live terrain grid from LINZ — can take a moment</div>
+    </div>
+    <div class="card">
+      <iframe src="{{ url_for('run_plot3d', run_id=run_id) }}"
+              style="width:100%;height:820px;border:1px solid var(--hairline);display:block"
+              title="3D terrain view"></iframe>
+    </div>
+  </section>
+
+  <!-- ================= PLAN VIEW ================= -->
+  <section>
+    <div class="sec-head">
+      <h2>Plan view</h2>
+      <div class="note">Gradient, sideslope, and turn radius, plotted along the line</div>
+    </div>
+    <div class="card">
+      <h3>Map — toggle layers top-right</h3>
+      <p class="card-sub">
+        Sideslope layer: <span style="color:#00cc00">green</span> &lt;5°,
+        <span style="color:#ada800">yellow</span> 5–15°,
+        <span style="color:#ff8800">orange</span> 15–30°,
+        <span style="color:#ff4400">red</span> 30–45°,
+        <span style="color:#cc0000">dark red</span> &gt;45° — steeper cross-slope means more
+        exposure and more benching/cut-fill needed to hold the tread.
+      </p>
+      <iframe src="{{ url_for('run_map', run_id=run_id) }}"
+              style="width:100%;height:640px;border:1px solid var(--hairline);display:block"
+              title="Plan view map"></iframe>
+    </div>
+  </section>
+
+  <!-- ================= CHARTS ================= -->
+  <section>
+    <div class="sec-head">
+      <h2>Profiles</h2>
+      <div class="note">Matplotlib, same as the notebook</div>
+    </div>
+    <div class="card">
+      <h3>Gradient profile</h3>
+      <img src="{{ r.gradient_png }}" alt="Gradient profile" style="width:100%;height:auto">
+    </div>
+    {% if r.sideslope_png %}
+    <div class="card" style="margin-top:20px">
+      <h3>Sideslope profile</h3>
+      <p class="card-sub">Red shading marks where the smoothed cross-slope is at or above {{ r.steep_sideslope_deg }}° — the "steep" threshold used in the stat tiles above. Not a guideline grade ceiling; NZ MTB guidelines don't set one for sideslope.</p>
+      <img src="{{ r.sideslope_png }}" alt="Sideslope profile" style="width:100%;height:auto">
+    </div>
+    {% endif %}
+    {% if r.sideslope_exceedances %}
+    <div class="card" style="margin-top:20px">
+      <h3>Sections at or above {{ r.steep_sideslope_deg }}° sideslope</h3>
+      <p class="card-sub">Chainage ranges where the trail crosses the steep-sideslope threshold — the places a builder or field crew would go look at edge protection.</p>
+      <table class="flags">
+        <thead><tr><th scope="col">Chainage</th><th scope="col">Length</th><th scope="col">Peak sideslope</th></tr></thead>
+        <tbody>
+          {% for run in r.sideslope_exceedances %}
+          <tr>
+            <td>{{ run.start_m }}–{{ run.end_m }} m</td>
+            <td>{{ run.length_m }} m</td>
+            <td>{{ run.peak_deg }}°</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </section>
+
+  <footer>
+    <span class="mono">{{ r.trail_name }} · run {{ run_id }}</span>
+    <span class="mono">Elevation © LINZ, CC BY 4.0</span>
+    <span class="mono">Thresholds © Recreation Aotearoa 2022</span>
+  </footer>
+</div>
+
+<script>
+const STATED_GRADE = {{ r.stated_grade }};
+const GRADE_NAMES = {{ grade_colours | tojson }};
+
+function showVerdict(grade, gradeName) {
+  document.getElementById('verdict').style.display = '';
+  document.getElementById('verdict-badge').style.setProperty('--vg', 'var(--g' + grade + ')');
+  document.getElementById('verdict-num').textContent = grade;
+  document.getElementById('verdict-nm').textContent = gradeName;
+
+  const mismatch = document.getElementById('verdict-mismatch');
+  if (grade > STATED_GRADE) {
+    mismatch.innerHTML = `<p><strong>Mismatch — measured HARDER than signposted.</strong> Stated Grade ${STATED_GRADE}, measured Grade ${grade}. This trail is under-graded for what's actually out there.</p>`;
+  } else if (grade < STATED_GRADE) {
+    mismatch.innerHTML = `<p><strong>Mismatch — measured EASIER than signposted.</strong> Stated Grade ${STATED_GRADE}, measured Grade ${grade}. This trail is over-graded for what's actually out there.</p>`;
+  } else {
+    mismatch.innerHTML = `<p><strong>Signposted grade matches the measured grade.</strong></p>`;
+  }
+}
+
+const apiKeyInput = document.getElementById('ai-api-key');
+const rememberBox = document.getElementById('ai-api-key-remember');
+const savedKey = localStorage.getItem('anthropic_api_key');
+if (savedKey) apiKeyInput.value = savedKey;
+
+document.getElementById('ai-summary-btn').addEventListener('click', async () => {
+  const btn = document.getElementById('ai-summary-btn');
+  const status = document.getElementById('ai-summary-status');
+  const summaryCard = document.getElementById('ai-summary-text-card');
+  const recCard = document.getElementById('ai-recommendation-card');
+  const out = document.getElementById('ai-summary-text');
+  const rec = document.getElementById('ai-recommendation-text');
+  const apiKey = apiKeyInput.value.trim();
+  if (rememberBox.checked && apiKey) {
+    localStorage.setItem('anthropic_api_key', apiKey);
+  } else if (!rememberBox.checked) {
+    localStorage.removeItem('anthropic_api_key');
+  }
+  btn.disabled = true;
+  status.textContent = 'Asking Claude…';
+  summaryCard.style.display = 'none';
+  recCard.style.display = 'none';
+  out.textContent = '';
+  rec.textContent = '';
+  try {
+    const getSel = id => { const v = document.getElementById(id).value; return v === '' ? null : parseInt(v); };
+    const resp = await fetch("{{ url_for('run_summary', run_id=run_id) }}", {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        api_key: apiKey,
+        field_obstacles: getSel('field-obstacles'),
+        field_surface: getSel('field-surface'),
+        field_features: getSel('field-features'),
+      }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) {
+      status.textContent = data.error || 'Grading failed.';
+    } else {
+      status.textContent = '';
+      showVerdict(data.grade, data.grade_name);
+      out.textContent = data.summary;
+      summaryCard.style.display = '';
+      rec.textContent = data.recommendation;
+      recCard.style.display = '';
+    }
+  } catch (e) {
+    status.textContent = 'Request failed: ' + e;
+  } finally {
+    btn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>

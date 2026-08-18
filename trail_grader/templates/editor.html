@@ -1,56 +1,88 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Trail Line Editor — LiDAR Trail Audit</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='audit.css') }}">
 
-<!-- Leaflet -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<!-- Leaflet-Geoman (vertex editing) -->
 <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.18.3/dist/leaflet-geoman.css" />
 <script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.18.3/dist/leaflet-geoman.js"></script>
 
 <style>
-  html, body { height: 100%; margin: 0; font-family: system-ui, sans-serif; }
-  #map { position: absolute; top: 0; bottom: 0; left: 0; right: 320px; }
+  html, body { height: 100%; }
+  body { display: flex; flex-direction: column; }
+
+  .eyebar {
+    font-family: var(--font-body);
+    font-size: 13px;
+    color: var(--ink-3);
+    padding: 14px 20px;
+    display: flex;
+    gap: 14px;
+    align-items: baseline;
+    flex-wrap: wrap;
+    border-bottom: 1px solid var(--rule);
+    background: var(--plane);
+    flex: 0 0 auto;
+  }
+  .eyebar a { color: var(--ink-3); text-decoration: none; border-bottom: 1px solid var(--rule); }
+  .eyebar a:hover { color: var(--ink); }
+  .eyebar .title { color: var(--ink); font-weight: 600; letter-spacing: 0.02em; }
+
+  .editor-body { flex: 1 1 auto; display: flex; min-height: 0; }
+  #map { flex: 1 1 auto; }
+
   #panel {
-    position: absolute; top: 0; bottom: 0; right: 0; width: 320px;
-    background: #1e1e24; color: #eee; padding: 16px; box-sizing: border-box;
-    overflow-y: auto; box-shadow: -2px 0 8px rgba(0,0,0,.4);
+    width: 320px; flex: 0 0 320px;
+    background: var(--surface); color: var(--ink);
+    padding: 20px; box-sizing: border-box;
+    overflow-y: auto;
+    border-left: 1px solid var(--hairline);
   }
-  #panel h1 { font-size: 17px; margin: 0 0 4px; }
-  #panel .sub { color: #9aa; font-size: 12px; margin-bottom: 14px; }
-  .grp { border-top: 1px solid #333; padding: 12px 0; }
-  .grp h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
-            color: #8bd; margin: 0 0 8px; }
+  .grp { border-top: 1px solid var(--grid); padding: 16px 0; }
+  .grp:first-child { border-top: 0; padding-top: 0; }
+  .grp h2 {
+    font-family: var(--font-body); font-size: 13px;
+    color: var(--ink-3); font-weight: 600; margin: 0 0 10px;
+  }
   button {
-    width: 100%; padding: 9px; margin: 4px 0; border: 0; border-radius: 6px;
-    background: #2d6cdf; color: #fff; font-size: 13px; cursor: pointer;
+    width: 100%; padding: 10px; margin: 4px 0;
+    font-family: var(--font-body); font-size: 13.5px; font-weight: 600;
+    background: var(--accent); color: var(--surface); border: 0; border-radius: 6px; cursor: pointer;
   }
-  button.sec { background: #3a3a44; }
-  button:hover { filter: brightness(1.12); }
-  label.row { display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 6px 0; }
-  input[type=range] { flex: 1; }
-  .stat { font-size: 13px; color: #cde; margin: 3px 0; }
-  .stat b { color: #fff; }
-  .hint { font-size: 11px; color: #99a; line-height: 1.45; margin-top: 6px; }
-  input[type=file] { font-size: 12px; color: #ccc; width: 100%; }
+  :root:not([data-theme="light"]) button { color: var(--plane); }
+  @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) button { color: #fff; } }
+  button:hover { filter: brightness(1.08); }
+  button.sec {
+    background: var(--surface-2); color: var(--ink); border: 1px solid var(--rule);
+  }
+  button.sec:hover { background: var(--surface); }
+  label.row { display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 8px 0; color: var(--ink-2); }
+  input[type=range] { flex: 1; accent-color: var(--accent); }
+  .stat { font-size: 13px; color: var(--ink-2); margin: 4px 0; }
+  .stat b { color: var(--ink); }
+  .hint { font-size: 11.5px; color: var(--ink-3); line-height: 1.5; margin-top: 8px; }
+  input[type=file] { font-size: 12px; color: var(--ink-2); width: 100%; }
 </style>
 </head>
 <body>
+
+<div class="eyebar">
+  <span class="title">LiDAR Trail Audit</span>
+  <span>Trail Line Editor</span>
+  <a href="{{ url_for('grade_form') }}" style="margin-left:auto">Skip to manual grading form →</a>
+</div>
+
+<div class="editor-body">
 <div id="map"></div>
 <div id="panel">
-  <h1>Trail Line Editor</h1>
-  <div class="sub">Correct the trail line against LiDAR &amp; aerial imagery</div>
-
   <div class="grp">
     <h2>How to use</h2>
     <div class="hint">
-      Drag the <b>white vertices</b> to move the line onto the real track.
-      Click a mid-point handle to add a vertex; right-click a vertex to delete.
-      Use the layer control (top-right of map) to switch aerial / hillshade / slope.
+      Drag <b>white vertices</b> onto the real track. Click a mid-point to add one, right-click to delete.
     </div>
   </div>
 
@@ -59,6 +91,7 @@
     <label class="row">Hillshade <input id="hsOp" type="range" min="0" max="1" step="0.05" value="0.55"></label>
     <label class="row">Slope <input id="slOp" type="range" min="0" max="1" step="0.05" value="0.55"></label>
     <div class="hint">Hillshade/slope reveal the graded bench under tree canopy where aerial can't see it.</div>
+    <div class="hint" id="terrainStatus"></div>
   </div>
 
   <div class="grp">
@@ -67,12 +100,12 @@
     <div class="stat">Length: <b id="length">–</b></div>
     <button id="reset" class="sec">Reset to original line</button>
     <label class="row" style="margin-top:8px">Load a KML: <input id="kmlFile" type="file" accept=".kml"></label>
-    <div class="hint">Load any Trailforks/GPS KML to edit a different trail (DEM overlays are Askins-only for now).</div>
+    <div class="hint">Load any Trailforks/GPS KML to edit a different trail — hillshade/slope regenerate live from LINZ for wherever it is (coarse grid, can take up to a minute).</div>
   </div>
 
   <div class="grp">
     <h2>Export corrected line</h2>
-    <button id="expKml">Download KML</button>
+    <button id="expKml" class="sec">Download KML</button>
     <button id="expGeo" class="sec">Download GeoJSON</button>
     <div class="hint">Feed the exported file back into your grading pipeline to measure the accuracy gain.</div>
   </div>
@@ -80,11 +113,12 @@
   <div class="grp">
     <h2>Finish</h2>
     <button id="doneBtn">Done — grade this trail →</button>
-    <div class="hint">Sends the corrected line straight to the grader (must be running on <span id="graderHost"></span>).</div>
+    <div class="hint">Sends the corrected line straight to the grader below.</div>
   </div>
 </div>
+</div>
 
-<script src="askins_data.js"></script>
+<script src="{{ url_for('static', filename='askins_data.js') }}"></script>
 <script>
 // ---- LINZ API key (LDS). NOTE: exposed client-side; restrict the key by
 // domain in your LINZ account before any public deploy. ----
@@ -99,9 +133,8 @@ const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
 
 const map = L.map("map", { center: ASKINS.center, zoom: 16, layers: [aerial] });
 
-// DEM overlays (EPSG:3857 PNGs, bounds precomputed)
-const hillshade = L.imageOverlay("hillshade.png", ASKINS.hillshadeBounds, { opacity: 0.55 });
-const slope     = L.imageOverlay("slope.png",     ASKINS.slopeBounds,     { opacity: 0.55 });
+const hillshade = L.imageOverlay("{{ url_for('static', filename='hillshade.png') }}", ASKINS.hillshadeBounds, { opacity: 0.55 });
+const slope     = L.imageOverlay("{{ url_for('static', filename='slope.png') }}",     ASKINS.slopeBounds,     { opacity: 0.55 });
 
 L.control.layers(
   { "LINZ aerial (2025)": aerial, "OpenStreetMap": osm },
@@ -144,10 +177,38 @@ function updateStats() {
 
 loadTrail(toLatLngs(ASKINS.trail), true);
 
-// ---- reset ----
-document.getElementById("reset").onclick = () => loadTrail(toLatLngs(ASKINS.trail), true);
+const ASKINS_HILLSHADE_URL = "{{ url_for('static', filename='hillshade.png') }}";
+const ASKINS_SLOPE_URL = "{{ url_for('static', filename='slope.png') }}";
+document.getElementById("reset").onclick = () => {
+  loadTrail(toLatLngs(ASKINS.trail), true);
+  hillshade.setUrl(ASKINS_HILLSHADE_URL);
+  hillshade.setBounds(ASKINS.hillshadeBounds);
+  slope.setUrl(ASKINS_SLOPE_URL);
+  slope.setBounds(ASKINS.slopeBounds);
+  terrainStatus.textContent = "";
+};
 
-// ---- load a different KML ----
+const terrainStatus = document.getElementById("terrainStatus");
+async function refreshTerrainOverlays(latlngs) {
+  terrainStatus.textContent = "Generating terrain overlay from live LINZ data…";
+  try {
+    const resp = await fetch("/editor/terrain", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ latlngs: latlngs.map(p => [p[0], p[1]]) }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || "Terrain fetch failed.");
+    hillshade.setUrl(data.hillshade_data_uri);
+    hillshade.setBounds(data.bounds);
+    slope.setUrl(data.slope_data_uri);
+    slope.setBounds(data.bounds);
+    terrainStatus.textContent = "";
+  } catch (e) {
+    terrainStatus.textContent = "Terrain unavailable: " + e.message;
+  }
+}
+
 document.getElementById("kmlFile").onchange = ev => {
   const file = ev.target.files[0];
   if (!file) return;
@@ -159,23 +220,17 @@ document.getElementById("kmlFile").onchange = ev => {
       const p = c.split(","); return [parseFloat(p[1]), parseFloat(p[0])];
     });
     loadTrail(latlngs, true);
+    refreshTerrainOverlays(latlngs);
   };
   r.readAsText(file);
 };
 
-// ---- exports ----
 function download(name, text, mime) {
   const blob = new Blob([text], { type: mime });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob); a.download = name; a.click();
   URL.revokeObjectURL(a.href);
 }
-document.getElementById("expGeo").onclick = () => {
-  const coords = trail.getLatLngs().map(p => [p.lng, p.lat]);
-  const gj = { type: "Feature", properties: { name: "corrected_trail" },
-               geometry: { type: "LineString", coordinates: coords } };
-  download("trail_corrected.geojson", JSON.stringify(gj, null, 2), "application/geo+json");
-};
 function trailToKml() {
   const coordStr = trail.getLatLngs().map(p => p.lng + "," + p.lat + ",0").join(" ");
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -184,14 +239,17 @@ function trailToKml() {
 <LineString><tessellate>1</tessellate><coordinates>${coordStr}</coordinates></LineString>
 </Placemark></Document></kml>`;
 }
+document.getElementById("expGeo").onclick = () => {
+  const coords = trail.getLatLngs().map(p => [p.lng, p.lat]);
+  const gj = { type: "Feature", properties: { name: "corrected_trail" },
+               geometry: { type: "LineString", coordinates: coords } };
+  download("trail_corrected.geojson", JSON.stringify(gj, null, 2), "application/geo+json");
+};
 document.getElementById("expKml").onclick = () => {
   download("trail_corrected.kml", trailToKml(), "application/vnd.google-earth.kml+xml");
 };
 
-// ---- hand off to the grader ----
-const GRADER_ORIGIN = "http://127.0.0.1:5000";
-document.getElementById("graderHost").textContent = GRADER_ORIGIN;
-
+// ---- hand off to the grader (same site now, so this is just a relative POST) ----
 document.getElementById("doneBtn").onclick = () => {
   const kmlFile = new File([trailToKml()], "trail_corrected.kml",
                            { type: "application/vnd.google-earth.kml+xml" });
@@ -200,7 +258,7 @@ document.getElementById("doneBtn").onclick = () => {
 
   const form = document.createElement("form");
   form.method = "POST";
-  form.action = GRADER_ORIGIN + "/audit";
+  form.action = "{{ url_for('audit') }}";
   form.enctype = "multipart/form-data";
   form.style.display = "none";
 
@@ -209,7 +267,7 @@ document.getElementById("doneBtn").onclick = () => {
   fileInput.files = dt.files;
   form.appendChild(fileInput);
 
-  const fields = { source: "upload", trail_name: "Corrected trail", direction: "descending" };
+  const fields = { source: "upload", trail_name: "Corrected trail", stated_grade: "4", want_sideslope: "1" };
   for (const [name, value] of Object.entries(fields)) {
     const input = document.createElement("input");
     input.type = "hidden"; input.name = name; input.value = value;

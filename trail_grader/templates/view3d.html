@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ trail_name }} — LiDAR Trail Audit</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='audit.css') }}">
+<script src="{{ url_for('static', filename='plotly.min.js') }}"></script>
+</head>
+<body>
+<div class="sheet wide">
+
+  <header class="titleblock">
+    <p class="eyebrow">
+      <span>LiDAR Trail Audit</span>
+      <span>Step 2 of 2 · Results</span>
+      <a href="{{ url_for('index') }}">← Run another trail</a>
+    </p>
+    <h1>{{ trail_name }}</h1>
+    <p class="subtitle" id="lede">—</p>
+    <dl class="fields">
+      <div class="field"><dt>Length</dt><dd id="f-len">—</dd></div>
+      <div class="field"><dt>Descent</dt><dd id="f-desc">—</dd></div>
+      <div class="field"><dt>Direction</dt><dd>{{ direction|capitalize }}</dd></div>
+      <div class="field"><dt>Stations</dt><dd id="f-stations">—</dd></div>
+      <div class="field"><dt>Run</dt><dd>{{ run_at }}</dd></div>
+    </dl>
+  </header>
+
+  <div class="verdict" id="verdict">
+    <div class="verdict-badge" id="verdict-badge">
+      <div class="lbl">Assessed grade</div>
+      <div class="num" id="v-num">—</div>
+      <div class="nm" id="v-name">—</div>
+    </div>
+    <div class="verdict-body">
+      <p id="v-lede">—</p>
+      <p id="v-detail">—</p>
+      <div class="checkrow" id="v-checks"></div>
+    </div>
+  </div>
+
+  <dl class="stats" id="stats"></dl>
+
+  <!-- ================= AI SUMMARY ================= -->
+  <section class="card" id="ai-summary-card" style="margin-bottom:24px">
+    <h3>Plain-language summary</h3>
+    <p class="card-sub">Claude turns the figures above into prose for a trail manager. Uses only the computed numbers — nothing invented.</p>
+    <button type="button" class="ghost" id="ai-summary-btn">Generate summary</button>
+    <p class="hint mono" id="ai-summary-status" style="color:var(--ink-3);font-size:11px;margin-top:8px"></p>
+    <div id="ai-summary-text" style="white-space:pre-wrap;margin-top:10px;font-size:14px;line-height:1.6"></div>
+  </section>
+
+  <!-- ================= 3D ================= -->
+  <section>
+    <div class="sec-head">
+      <h2>In three dimensions</h2>
+      <div class="note">Drag to orbit · scroll to zoom · right-drag to pan</div>
+    </div>
+
+    <div class="viewer">
+      <div class="viewer-bar">
+        <span class="grouplabel">Colour the trail by</span>
+        <div class="btnset" id="metric-set" role="group" aria-label="Trail colour metric">
+          <button type="button" class="ghost" data-metric="grade" aria-pressed="true">Grade</button>
+          <button type="button" class="ghost" data-metric="gradient" aria-pressed="false">Gradient</button>
+          <button type="button" class="ghost" data-metric="radius" aria-pressed="false">Turn radius</button>
+          <button type="button" class="ghost" data-metric="sideslope" aria-pressed="false">Cross-slope</button>
+        </div>
+
+        <span class="grouplabel" style="margin-left:auto">Terrain</span>
+        <div class="btnset">
+          <button type="button" class="ghost" id="terrain-toggle" aria-pressed="true">Show DEM</button>
+        </div>
+
+        <div class="slider">
+          <label class="grouplabel" for="exag">Vertical</label>
+          <input type="range" id="exag" min="1" max="5" step="0.5" value="2">
+          <output id="exag-out">2×</output>
+        </div>
+
+        <button type="button" class="ghost" id="reset-view">Reset view</button>
+      </div>
+
+      <div class="plot3d" id="plot3d" role="img"
+           aria-label="Three-dimensional view of the trail draped on the LiDAR terrain surface"></div>
+
+      <div class="viewer-bar" style="border-bottom:0;border-top:1px solid var(--grid)">
+        <div class="scalebar">
+          <span id="scale-lo">—</span>
+          <span class="scaleramp" id="scale-ramp"></span>
+          <span id="scale-hi">—</span>
+          <span id="scale-cap" style="margin-left:8px;color:var(--ink-3)"></span>
+        </div>
+      </div>
+    </div>
+
+    <p class="hint mono" style="color:var(--ink-3);font-size:11px;margin:12px 0 0" id="terrain-note"></p>
+  </section>
+
+  <!-- ================= 2D ================= -->
+  <section>
+    <div class="sec-head">
+      <h2>Measured</h2>
+      <div class="note">Click the map for details · hover the profile below</div>
+    </div>
+
+    <div class="card">
+      <h3>Plan view — graded by station</h3>
+      <p class="card-sub">The original trail map — same grader.py pipeline and Leaflet page as the standalone /grade view.</p>
+      <iframe src="{{ url_for('run_map', run_id=run_id) }}"
+              style="width:100%;height:640px;border:1px solid var(--hairline);display:block"
+              title="Plan view map"></iframe>
+      <div class="legend" id="grade-legend"></div>
+    </div>
+
+    <div class="card" style="margin-top:20px">
+      <h3>Long section</h3>
+      <p class="card-sub">Ground elevation and the smoothed gradient on a shared distance axis. Descent plots below the zero line; the pale ends are the part-filled smoothing window, excluded from every statistic.</p>
+      <div class="chart-scroll" id="profile-scroll">
+        <svg id="profile" viewBox="0 0 1000 420" role="img"
+             aria-labelledby="profile-title" tabindex="0" aria-describedby="profile-help">
+          <title id="profile-title">Elevation and gradient against distance</title>
+        </svg>
+        <div class="tip" id="profile-tip" role="status" aria-live="polite"></div>
+      </div>
+      <p id="profile-help" class="mono" style="color:var(--ink-3);font-size:11px;margin:10px 0 0">
+        Focus the chart and use ← → to step stations, Home / End to jump to the ends.
+      </p>
+      <details class="tableview">
+        <summary>Station table — every value plotted above</summary>
+        <div class="tablewrap">
+          <table id="station-table">
+            <thead><tr>
+              <th scope="col">Chainage m</th><th scope="col">Elev m</th><th scope="col">Gradient %</th>
+              <th scope="col">Radius m</th><th scope="col">Cross-slope °</th>
+              <th scope="col">Grade</th><th scope="col">Window</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </details>
+    </div>
+
+    <div class="grid-2" style="margin-top:20px">
+      <div class="card">
+        <h3>Grade distribution by length</h3>
+        <p class="card-sub">How much of the trail earns each grade, strict worst-of per station.</p>
+        <div class="dist" id="dist"></div>
+      </div>
+
+      <div class="card">
+        <h3>Sections above the assessed grade</h3>
+        <p class="card-sub">Runs of consecutive stations measuring harder than the grade the trail was given — the places a builder would go and look.</p>
+        <div class="chart-scroll">
+          <table class="flags" id="flags">
+            <thead><tr>
+              <th scope="col">Chainage</th><th scope="col">Length</th>
+              <th scope="col">Grade</th><th scope="col">Driven by</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p class="mono" id="flags-note" style="color:var(--ink-3);font-size:11px;margin:14px 0 0"></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= SETTINGS ================= -->
+  <section>
+    <div class="sec-head">
+      <h2>Run settings</h2>
+      <div class="note">What this result was produced with</div>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <h3>Inputs and parameters</h3>
+        <table class="spec" id="settings-table"></table>
+      </div>
+      <div class="card">
+        <h3>Grading thresholds — {{ direction }} trails</h3>
+        <p class="card-sub">Recreation Aotearoa, 2022. A grade allows a share of its length to break the maximum — that allowance is the exception column.</p>
+        <div class="chart-scroll">
+          <table class="thresh" id="thresh-table">
+            <thead><tr>
+              <th scope="col">Grade</th><th scope="col">Avg max</th><th scope="col">Peak max</th>
+              <th scope="col">Exception</th><th scope="col">Min radius</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <p style="margin-top:20px">
+      <a href="{{ url_for('audit_json', run_id=run_id) }}" class="mono">Download this result as JSON →</a>
+    </p>
+  </section>
+
+  <footer>
+    <span class="mono">{{ trail_name }} · run {{ run_id }}</span>
+    <span class="mono">Elevation © LINZ, CC BY 4.0</span>
+    <span class="mono">Thresholds © Recreation Aotearoa 2022</span>
+  </footer>
+</div>
+
+<script id="audit-data" type="application/json">{{ payload|safe }}</script>
+<script src="{{ url_for('static', filename='view3d.js') }}"></script>
+<script>
+document.getElementById('ai-summary-btn').addEventListener('click', async () => {
+  const btn = document.getElementById('ai-summary-btn');
+  const status = document.getElementById('ai-summary-status');
+  const out = document.getElementById('ai-summary-text');
+  btn.disabled = true;
+  status.textContent = 'Asking Claude…';
+  out.textContent = '';
+  try {
+    const resp = await fetch("{{ url_for('run_summary', run_id=run_id) }}", { method: 'POST' });
+    const data = await resp.json();
+    if (!resp.ok) {
+      status.textContent = data.error || 'Summary generation failed.';
+    } else {
+      status.textContent = '';
+      out.textContent = data.summary;
+    }
+  } catch (e) {
+    status.textContent = 'Request failed: ' + e;
+  } finally {
+    btn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>
