@@ -111,6 +111,12 @@
   </div>
 
   <div class="grp">
+    <h2>Custom DEM</h2>
+    <label class="row" style="display:block">Upload a GeoTIFF: <input id="demFile" type="file" accept=".tif,.tiff"></label>
+    <div class="hint" id="demStatus">Bundled data only covers Canterbury/Christchurch. To edit and grade a trail elsewhere, export a DEM GeoTIFF for its area (e.g. from <a href="https://data.linz.govt.nz" target="_blank" rel="noopener">LINZ Data Service</a>) and upload it here.</div>
+  </div>
+
+  <div class="grp">
     <h2>Finish</h2>
     <button id="doneBtn">Done — grade this trail →</button>
     <div class="hint">Sends the corrected line straight to the grader below.</div>
@@ -147,10 +153,13 @@ document.getElementById("slOp").oninput = e => slope.setOpacity(+e.target.value)
 
 // ---- the editable trail ----
 let trail = null;
+let lastLatLngs = null;
+let customDemId = null;
 function toLatLngs(geojson) {
   return geojson.geometry.coordinates.map(c => [c[1], c[0]]);
 }
 function loadTrail(latlngs, fit) {
+  lastLatLngs = latlngs;
   if (trail) map.removeLayer(trail);
   trail = L.polyline(latlngs, { color: "#ff00ff", weight: 3 }).addTo(map);
   trail.pm.enable({ allowSelfIntersection: true });
@@ -195,7 +204,7 @@ async function refreshTerrainOverlays(latlngs) {
     const resp = await fetch("/editor/terrain", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ latlngs: latlngs.map(p => [p[0], p[1]]) }),
+      body: JSON.stringify({ latlngs: latlngs.map(p => [p[0], p[1]]), dem_id: customDemId }),
     });
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error || "Terrain fetch failed.");
@@ -223,6 +232,26 @@ document.getElementById("kmlFile").onchange = ev => {
     refreshTerrainOverlays(latlngs);
   };
   r.readAsText(file);
+};
+
+const demStatus = document.getElementById("demStatus");
+document.getElementById("demFile").onchange = async ev => {
+  const file = ev.target.files[0];
+  if (!file) return;
+  demStatus.textContent = "Uploading " + file.name + "…";
+  const fd = new FormData();
+  fd.append("dem", file);
+  try {
+    const resp = await fetch("/editor/dem", { method: "POST", body: fd });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || "Upload failed.");
+    customDemId = data.dem_id;
+    demStatus.textContent = "Using " + file.name + " for terrain and grading.";
+    if (lastLatLngs) refreshTerrainOverlays(lastLatLngs);
+  } catch (e) {
+    customDemId = null;
+    demStatus.textContent = "Error: " + e.message;
+  }
 };
 
 function download(name, text, mime) {
@@ -268,6 +297,7 @@ document.getElementById("doneBtn").onclick = () => {
   form.appendChild(fileInput);
 
   const fields = { source: "upload", trail_name: "Corrected trail", stated_grade: "4", want_sideslope: "1" };
+  if (customDemId) fields.dem_id = customDemId;
   for (const [name, value] of Object.entries(fields)) {
     const input = document.createElement("input");
     input.type = "hidden"; input.name = name; input.value = value;

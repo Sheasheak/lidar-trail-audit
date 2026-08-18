@@ -18,7 +18,9 @@ except ImportError:
     anthropic = None
 
 app = Flask(__name__)
-app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024
+# 50MB: KML uploads are tiny, but a user-uploaded DEM GeoTIFF for the editor's
+# "grade any trail" option needs more headroom than the original 10MB cap.
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
 
 # Public deployment: /audit makes thousands of LINZ calls and /summary spends
 # Anthropic tokens, so both need tighter per-IP caps than the default.
@@ -161,6 +163,13 @@ RUNS = OrderedDict()
 RUN_KML = OrderedDict()
 MAX_RUNS = 12
 
+# User-uploaded DEMs for the editor's "grade any trail" option, keyed by
+# dem_id. Values are the (array, transform, nodata) tuple from
+# gv11.load_uploaded_dem, already reprojected — loaded once at upload time
+# rather than on every terrain/audit call that references it.
+CUSTOM_DEMS = OrderedDict()
+MAX_DEMS = 6
+
 
 def _render_input(error=None, status=200):
     return render_template('input.html', error=error), status
@@ -185,13 +194,39 @@ def editor_terrain():
     latlngs = body.get('latlngs')
     if not latlngs or len(latlngs) < 2:
         return jsonify({'error': 'No trail line given.'}), 400
+    dem_source = CUSTOM_DEMS.get(body.get('dem_id'))
     points_wgs84 = [(lon, lat) for lat, lon in latlngs]
     try:
-        overlays = gv11.terrain_overlays(points_wgs84)
+        overlays = gv11.terrain_overlays(points_wgs84, dem_source=dem_source)
     except Exception as e:
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
     return jsonify(overlays)
+
+
+@app.route('/editor/dem', methods=['POST'])
+@limiter.limit("10 per hour")
+def editor_dem():
+    """Accepts a user-uploaded GeoTIFF DEM so the editor (and grading, via
+    the 'Done' handoff) can work for trails outside the bundled Canterbury/
+    Christchurch tile coverage."""
+    f = request.files.get('dem')
+    if not f or not f.filename:
+        return jsonify({'error': 'Choose a DEM file (GeoTIFF).'}), 400
+    if not f.filename.lower().endswith(('.tif', '.tiff')):
+        return jsonify({'error': 'That file is not a GeoTIFF (.tif/.tiff) — got "%s".' % f.filename}), 400
+    try:
+        loaded = gv11.load_uploaded_dem(f.read())
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': 'Could not read that file: %s' % e}), 400
+    dem_id = uuid.uuid4().hex[:10]
+    CUSTOM_DEMS[dem_id] = loaded
+    while len(CUSTOM_DEMS) > MAX_DEMS:
+        CUSTOM_DEMS.popitem(last=False)
+    return jsonify({'dem_id': dem_id})
 
 
 @app.route('/grade')
@@ -229,10 +264,12 @@ def audit():
         stated_grade = 4
     stated_grade = max(1, min(6, stated_grade))
     want_sideslope = request.form.get('want_sideslope') == '1'
+    dem_id = request.form.get('dem_id') or None
+    dem_source = CUSTOM_DEMS.get(dem_id)
 
     try:
         result = gv11.run_audit(kml_bytes, trail_name=trail_name, stated_grade=stated_grade,
-                                want_sideslope=want_sideslope)
+                                want_sideslope=want_sideslope, dem_source=dem_source)
     except ValueError as e:
         return _render_input(str(e), 400)
     except Exception as e:
@@ -240,6 +277,8 @@ def audit():
         return _render_input('Processing failed: %s' % e, 500)
 
     result['run_at'] = datetime.now().strftime('%d %b %Y, %H:%M')
+    if dem_source is not None:
+        result['_dem_id'] = dem_id
 
     run_id = uuid.uuid4().hex[:10]
     RUNS[run_id] = result
@@ -275,8 +314,9 @@ def run_plot3d(run_id):
     result = RUNS.get(run_id)
     if result is None:
         abort(404)
+    dem_source = CUSTOM_DEMS.get(result.get('_dem_id'))
     try:
-        return gv11.render_plot3d(result)
+        return gv11.render_plot3d(result, dem_source=dem_source)
     except Exception as e:
         traceback.print_exc()
         return '3D view unavailable: %s' % e, 500

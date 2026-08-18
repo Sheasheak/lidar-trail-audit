@@ -15,6 +15,8 @@ import base64
 
 import numpy as np
 import rasterio
+from rasterio.io import MemoryFile
+from rasterio import warp
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -64,15 +66,47 @@ RADIUS_MIN = {g: r for g, r, _ in RADIUS_GRADES}
 STEEP_SIDESLOPE_DEG = 30
 
 
-def _load_local_dtm(bbox_nztm, buffer=60):
+def load_uploaded_dem(dem_bytes):
+    """Open a user-uploaded single-file DEM (GeoTIFF), reprojecting to
+    EPSG:2193 if needed. Returns (elevation array, raster transform, nodata)
+    for the whole raster, unmerged/uncropped — an uploaded file is already
+    scoped to one trail's area by whatever the user chose to download, so
+    there's no tile index/bbox-cropping step like the bundled dataset."""
+    with MemoryFile(dem_bytes) as memfile:
+        with memfile.open() as src:
+            if src.crs is None:
+                raise ValueError(
+                    "That file has no coordinate reference system embedded — "
+                    "export it as a georeferenced GeoTIFF and try again.")
+            nodata = src.nodata
+            if src.crs.to_epsg() == 2193:
+                return src.read(1).astype(float), src.transform, nodata
+            transform, width, height = warp.calculate_default_transform(
+                src.crs, "EPSG:2193", src.width, src.height, *src.bounds)
+            dest = np.full((height, width), np.nan, dtype="float64")
+            warp.reproject(
+                source=rasterio.band(src, 1), destination=dest,
+                src_transform=src.transform, src_crs=src.crs,
+                dst_transform=transform, dst_crs="EPSG:2193",
+                src_nodata=nodata, dst_nodata=np.nan,
+                resampling=warp.Resampling.bilinear)
+            return dest, transform, np.nan
+
+
+def _load_local_dtm(bbox_nztm, buffer=60, dem_source=None):
     """Merge the local 1 m LiDAR tiles covering bbox_nztm ([xmin, ymin, xmax,
-    ymax]) and return (elevation array, raster transform)."""
+    ymax]) and return (elevation array, raster transform, nodata). If
+    dem_source is given (an already-loaded (array, transform, nodata) tuple
+    from load_uploaded_dem), it's returned as-is instead — the bundled-tile
+    path below is untouched."""
+    if dem_source is not None:
+        return dem_source
     if not DTM_FOLDER:
         raise ValueError(
             "No local LiDAR DEM configured — set 'dtm_folder' in config.json.")
     buf, _ = load_dtm_fast(DTM_FOLDER, bbox_nztm, buffer=buffer)
     with rasterio.open(buf) as src:
-        return src.read(1), src.transform
+        return src.read(1), src.transform, None
 
 
 def parse_kml(kml_bytes):
@@ -177,7 +211,7 @@ TERRAIN_BUFFER_M = 60
 TERRAIN_HS_AZIMUTHS = (225, 270, 315, 360)
 
 
-def terrain_overlays(points_wgs84, buffer_m=TERRAIN_BUFFER_M, vert_exag=1.5):
+def terrain_overlays(points_wgs84, buffer_m=TERRAIN_BUFFER_M, vert_exag=1.5, dem_source=None):
     """Same method as Askins' precomputed hillshade/slope: shade the native
     1 m local DEM directly (no coarse resampling), multidirectional so the
     bench cut reads clearly, rather than a single low-angle light."""
@@ -187,9 +221,12 @@ def terrain_overlays(points_wgs84, buffer_m=TERRAIN_BUFFER_M, vert_exag=1.5):
     xmin, xmax = min(xs) - buffer_m, max(xs) + buffer_m
     ymin, ymax = min(ys) - buffer_m, max(ys) + buffer_m
 
-    arr, transform = _load_local_dtm([xmin, ymin, xmax, ymax], buffer=0)
+    arr, transform, nodata = _load_local_dtm([xmin, ymin, xmax, ymax], buffer=0, dem_source=dem_source)
     elev_grid = arr.astype(float)
-    elev_grid[elev_grid < -90] = np.nan  # AAIGrid NODATA_value (-99)
+    if nodata is None:
+        elev_grid[elev_grid < -90] = np.nan  # AAIGrid NODATA_value (-99), bundled dataset
+    elif not (isinstance(nodata, float) and math.isnan(nodata)):
+        elev_grid[elev_grid == nodata] = np.nan
     if np.isnan(elev_grid).all():
         raise ValueError("No local LiDAR DEM coverage for this area.")
     if np.isnan(elev_grid).any():
@@ -220,7 +257,8 @@ def terrain_overlays(points_wgs84, buffer_m=TERRAIN_BUFFER_M, vert_exag=1.5):
     }
 
 
-def run_audit(kml_bytes, trail_name="Trail", stated_grade=4, progress=None, want_sideslope=True):
+def run_audit(kml_bytes, trail_name="Trail", stated_grade=4, progress=None, want_sideslope=True,
+              dem_source=None):
     """Runs the full v11 pipeline. `progress(msg)` is called with short status
     strings, if given, so a caller can show something better than a blank page
     while the elevation sampling and chart rendering run."""
@@ -241,11 +279,16 @@ def run_audit(kml_bytes, trail_name="Trail", stated_grade=4, progress=None, want
     note(f"Sampling {len(points_nztm_dense)} elevations from local LiDAR DEM…")
     xs_d = [p[0] for p in points_nztm_dense]
     ys_d = [p[1] for p in points_nztm_dense]
-    arr, transform = _load_local_dtm([min(xs_d), min(ys_d), max(xs_d), max(ys_d)])
+    arr, transform, _nodata = _load_local_dtm(
+        [min(xs_d), min(ys_d), max(xs_d), max(ys_d)], dem_source=dem_source)
     elevations_dense = [sample_raster(arr, transform, x, y) for x, y in points_nztm_dense]
 
     keep = [i for i, e in enumerate(elevations_dense) if not np.isnan(e)]
     if len(keep) < 10:
+        if dem_source is not None:
+            raise ValueError(
+                "Too few elevations came back from the uploaded DEM (%d of %d) — "
+                "check the trail falls inside the DEM's extent." % (len(keep), len(elevations_dense)))
         raise ValueError(
             "Too few elevations came back from the local LiDAR DEM (%d of %d) — "
             "check the trail falls inside the tile coverage configured in "
@@ -584,7 +627,7 @@ _FLYTHROUGH_HTML = """
 """
 
 
-def render_plot3d(result, grid_size=60, margin=150):
+def render_plot3d(result, grid_size=60, margin=150, dem_source=None):
     points_nztm_dense = result["points_nztm_dense"]
     elevations_dense = result["elevations_dense"]
     smoothed_dense = result["smoothed_dense"]
@@ -595,8 +638,9 @@ def render_plot3d(result, grid_size=60, margin=150):
     grid_e = np.linspace(min(eastings) - margin, max(eastings) + margin, grid_size)
     grid_n = np.linspace(min(northings) - margin, max(northings) + margin, grid_size)
 
-    arr, transform = _load_local_dtm(
-        [min(eastings), min(northings), max(eastings), max(northings)], buffer=margin)
+    arr, transform, _nodata = _load_local_dtm(
+        [min(eastings), min(northings), max(eastings), max(northings)], buffer=margin,
+        dem_source=dem_source)
     Z = np.array([[sample_raster(arr, transform, e, n) for e in grid_e] for n in grid_n],
                  dtype=float)
     E_grid, N_grid = np.meshgrid(grid_e, grid_n)
