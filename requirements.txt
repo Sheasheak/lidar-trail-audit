@@ -15,6 +15,7 @@ matplotlib
 folium
 plotly
 requests
+gunicorn # required for Render's start command (gunicorn app:app)
 # widgets / kernel (the parts missing from QGIS python)
 ipyleaflet
 ipywidgets>=8
