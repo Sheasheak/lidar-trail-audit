@@ -1,0 +1,19 @@
+# trail_grader Flask app — production deployment deps.
+# (root ../requirements.txt is for the TrailAudit notebook; this is the
+# smaller set the deployed app.py actually imports.)
+Flask
+flask-limiter
+gunicorn
+python-dotenv
+anthropic
+numpy
+scipy
+matplotlib
+folium
+plotly
+requests
+pyproj
+shapely
+pykml
+lxml
+rasterio

@@ -3,6 +3,8 @@ from collections import OrderedDict
 from datetime import datetime
 
 from flask import Flask, abort, jsonify, redirect, render_template, request, url_for
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 import grader_v11 as gv11
 
@@ -17,6 +19,10 @@ except ImportError:
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024
+
+# Public deployment: /audit makes thousands of LINZ calls and /summary spends
+# Anthropic tokens, so both need tighter per-IP caps than the default.
+limiter = Limiter(get_remote_address, app=app, default_limits=["200 per day", "50 per hour"])
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SAMPLE_KML = os.path.join(REPO_ROOT, 'data', 'askins.kml')
@@ -173,6 +179,7 @@ def editor():
 
 
 @app.route('/editor/terrain', methods=['POST'])
+@limiter.limit("30 per minute")
 def editor_terrain():
     body = request.get_json(silent=True) or {}
     latlngs = body.get('latlngs')
@@ -195,6 +202,7 @@ def grade_form():
 
 
 @app.route('/audit', methods=['POST'])
+@limiter.limit("5 per hour")
 def audit():
     source = request.form.get('source', 'sample')
     if source == 'upload':
@@ -284,6 +292,7 @@ def audit_json(run_id):
 
 
 @app.route('/run/<run_id>/summary', methods=['POST'])
+@limiter.limit("10 per hour")
 def run_summary(run_id):
     result = RUNS.get(run_id)
     if result is None:
