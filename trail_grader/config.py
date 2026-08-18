@@ -19,4 +19,4 @@ def save_config(data):
         json.dump(data, f, indent=2)
 
 def get_dtm_folder():
-    return load_config().get('dtm_folder', '')
+    return os.environ.get('DTM_FOLDER') or load_config().get('dtm_folder', '')
