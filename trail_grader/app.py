@@ -298,7 +298,8 @@ def view_run(run_id):
             'That result is no longer held in memory — the server keeps the last '
             '%d runs. Run the audit again.' % MAX_RUNS, 404)
     return render_template('result_v11.html', run_id=run_id, r=result,
-                           grade_colours=gv11.GRADE_COLOURS)
+                           grade_colours=gv11.GRADE_COLOURS,
+                           server_key_available=bool(_anthropic_client))
 
 
 @app.route('/run/<run_id>/map')

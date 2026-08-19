@@ -49,7 +49,12 @@
     <p class="card-sub">Claude combines the LiDAR figures above with your field observations to settle the final
       grade, then writes a summary and recommendation for a trail manager. Uses only the computed numbers —
       nothing invented.</p>
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px">
+    {% if server_key_available %}
+    <p class="hint mono" style="margin-bottom:10px">
+      <a href="#" id="ai-key-toggle" style="color:var(--ink-3)">Use your own API key instead</a>
+    </p>
+    {% endif %}
+    <div id="ai-key-row" style="display:{{ 'none' if server_key_available else 'flex' }};gap:8px;align-items:center;margin-bottom:14px">
       <input type="password" id="ai-api-key" placeholder="sk-ant-… (Anthropic API key)"
              style="flex:1;padding:6px 10px;font-size:12px;font-family:var(--mono, monospace);border:1px solid var(--hairline);border-radius:4px">
       <label style="font-size:11px;color:var(--ink-3);white-space:nowrap"><input type="checkbox" id="ai-api-key-remember" checked style="vertical-align:middle"> remember</label>
@@ -227,6 +232,15 @@ const apiKeyInput = document.getElementById('ai-api-key');
 const rememberBox = document.getElementById('ai-api-key-remember');
 const savedKey = localStorage.getItem('anthropic_api_key');
 if (savedKey) apiKeyInput.value = savedKey;
+
+const keyToggle = document.getElementById('ai-key-toggle');
+if (keyToggle) {
+  keyToggle.addEventListener('click', (e) => {
+    e.preventDefault();
+    document.getElementById('ai-key-row').style.display = 'flex';
+    keyToggle.style.display = 'none';
+  });
+}
 
 document.getElementById('ai-summary-btn').addEventListener('click', async () => {
   const btn = document.getElementById('ai-summary-btn');
