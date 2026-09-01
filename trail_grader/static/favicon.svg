@@ -1,5 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="420" height="312" viewBox="0 0 420 312" role="img" aria-label="TrailSafe logo, stacked">
   <title>TrailSafe logo, stacked</title>
+  <rect x="0" y="0" width="420" height="312" fill="#ffffff"/>
   <g transform="translate(114,15.2) scale(1.6)">
   <path d="M60,22 L6,100.0 L22,92 L40,102 L58,86 L76,96 L94,84 L114,95.7 Z" fill="#2F7A55" opacity="0.15"/>
   <line x1="60" y1="22" x2="22" y2="92" stroke="#2F7A55" stroke-width="1.6" opacity="0.4"/>
