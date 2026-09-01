@@ -1,13 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200" role="img" aria-label="TrailSafe icon">
   <title>TrailSafe icon</title>
   <circle cx="100" cy="100" r="100" fill="#ffffff"/>
-  <g transform="translate(28, 29.5) scale(1.2)">
-  <path d="M60,22 L6,100.0 L22,92 L40,102 L58,86 L76,96 L94,84 L114,95.7 Z" fill="#2F7A55" opacity="0.15"/>
-  <line x1="60" y1="22" x2="22" y2="92" stroke="#2F7A55" stroke-width="1.6" opacity="0.4"/>
-  <line x1="60" y1="22" x2="40" y2="102" stroke="#2F7A55" stroke-width="1.6" opacity="0.4"/>
-  <line x1="60" y1="22" x2="76" y2="96" stroke="#2F7A55" stroke-width="1.6" opacity="0.4"/>
-  <line x1="60" y1="22" x2="94" y2="84" stroke="#2F7A55" stroke-width="1.6" opacity="0.4"/>
-  <path d="M2,102 L22,92 L40,102 L58,86 L76,96 L94,84 L118,98" fill="none" stroke="#1F5B41" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round"/>
-  <circle cx="60" cy="22" r="6.5" fill="#2F7A55"/>
-  </g>
+  <path d="M40,140 L80,80 L100,105 L130,60 L165,140 Z" fill="#2F7A55"/>
 </svg>
