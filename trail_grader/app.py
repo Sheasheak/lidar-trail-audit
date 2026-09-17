@@ -237,7 +237,7 @@ def grade_form():
 
 
 @app.route('/audit', methods=['POST'])
-@limiter.limit("5 per hour")
+@limiter.limit("20 per hour")
 def audit():
     source = request.form.get('source', 'sample')
     if source == 'upload':
