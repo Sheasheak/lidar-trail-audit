@@ -1,22 +1,42 @@
 """Trail grading pipeline ported from TrailAudit_v11.ipynb (Downloads/), cell for
 cell — the notebook's exact grading thresholds/algorithm, Folium map, matplotlib
-gradient/sideslope profiles, Plotly 3D terrain view. Elevation comes from the
-local 1 m Canterbury/Christchurch LiDAR DEM tiles (config.json's dtm_folder),
-sampled via the same rasterio pipeline as grader.py/grader3d.py — accurate to
-1 m, rather than the live LINZ national DEM API (8 m).
+gradient/sideslope profiles, Plotly 3D terrain view.
+
+Elevation comes from the local 1 m Canterbury/Christchurch LiDAR DEM tiles
+(config.json's dtm_folder) when they cover the trail, sampled via the same
+rasterio pipeline as grader.py/grader3d.py — accurate to 1 m and fast, since
+it's one local raster merge rather than per-point network calls. Outside that
+bundled tile coverage, elevation falls back to LINZ's Export API: layer
+121859 ("NZ LiDAR 1m DEM", an amalgamated national mosaic of current LiDAR
+surveys, not an 8 m dataset) cropped to the trail's bounding box and
+downloaded as one GeoTIFF, then sampled with the exact same code path as the
+bundled tiles. One bulk export (measured ~15s end-to-end for a ~1.8 km2 area)
+replaces what would otherwise be one HTTP request per elevation point —
+thousands of them for even a short trail. An earlier version of this fallback
+queried LINZ's point-query API once per point instead; that worked but took
+8-9 minutes for a 15km trail, so it was replaced with this bulk-export
+approach. Requires the LINZ_API_KEY to carry the exports:read/exports:write
+scopes (set at data.linz.govt.nz under API Keys) — without them this fallback
+quietly returns no coverage and local-tile-only trails still work fine.
 
 This intentionally replaces grader.py / grader3d.py as the site's pipeline: the
 notebook is the newer, authoritative version of the tool.
 """
+import hashlib
 import io
 import json
 import math
+import os
+import time
+import zipfile
 import base64
 
 import numpy as np
 import rasterio
+import requests
 from rasterio.io import MemoryFile
 from rasterio import warp
+from rasterio.transform import array_bounds
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -24,7 +44,7 @@ from matplotlib.colors import LightSource
 import folium
 import plotly.graph_objects as go
 from pyproj import Transformer
-from shapely.geometry import LineString
+from shapely.geometry import LineString, box
 from scipy.ndimage import uniform_filter1d
 from pykml import parser as kml_parser
 
@@ -34,8 +54,163 @@ from grader3d import load_dtm_fast
 
 DTM_FOLDER = get_dtm_folder()
 
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CACHE_DIR = os.path.join(REPO_ROOT, "cache")
+os.makedirs(CACHE_DIR, exist_ok=True)
+
 to_nztm = Transformer.from_crs("EPSG:4326", "EPSG:2193", always_xy=True)
 to_wgs84 = Transformer.from_crs("EPSG:2193", "EPSG:4326", always_xy=True)
+
+EXPORT_LAYER_URL = "https://data.linz.govt.nz/services/api/v1/layers/121859/"
+EXPORT_TIMEOUT = 20
+EXPORT_POLL_INTERVAL = 2
+EXPORT_POLL_TIMEOUT = 180
+
+
+def _export_polygon_wgs84(polygon_nztm):
+    """Reproject a shapely Polygon's exterior ring (NZTM) to WGS84 lon/lat for
+    the Export API's extent field. A dense ring — e.g. from LineString.buffer,
+    which emits many points around curves — reprojects accurately; a sparse
+    4-corner rectangle can bow inward enough after reprojection to clip real
+    area off, since NZTM and WGS84 don't share straight lines."""
+    return [list(to_wgs84.transform(x, y)) for x, y in polygon_nztm.exterior.coords]
+
+
+EXPORT_VERTEX_BUDGET = 400  # LINZ caps extent polygons at 1000 vertices; stay well under
+
+
+def _export_corridor(bbox_nztm, buffer, corridor_nztm=None):
+    """Build the NZTM polygon to request from LINZ: a tight buffer around the
+    trail's own line when corridor_nztm (a shapely LineString) is given —
+    proportional to trail length, not bounding-box area, which matters a lot
+    for a winding/looping trail where the bbox can be many times the area the
+    trail actually passes through — else a buffered rectangle for callers
+    that only have a bbox (e.g. the editor's terrain preview).
+
+    LINZ rejects extent geometries over 1000 vertices (hit in practice: a
+    real trail's own KML vertices, buffered at the default curve resolution,
+    sailed past that for a 15km trail — and render_plot3d's 1m-densified
+    line would be far worse). Simplifying the *line* first — not the
+    buffered polygon — keeps the requested area close to the real trail
+    while cutting vertex count; this only affects what gets requested from
+    LINZ, not the full-resolution centreline actually sampled afterwards."""
+    if corridor_nztm is None:
+        xmin, ymin, xmax, ymax = bbox_nztm
+        return box(xmin - buffer, ymin - buffer, xmax + buffer, ymax + buffer)
+
+    tolerance = 0.0
+    for _ in range(10):
+        line = corridor_nztm if tolerance == 0 else corridor_nztm.simplify(tolerance)
+        polygon = line.buffer(buffer, quad_segs=2)
+        if len(polygon.exterior.coords) <= EXPORT_VERTEX_BUDGET:
+            return polygon
+        tolerance = max(tolerance * 2, 4.0)
+
+    # Simplification didn't converge (shouldn't happen) — a bounding-box
+    # rectangle always has few enough vertices and still covers the trail.
+    xmin, ymin, xmax, ymax = bbox_nztm
+    return box(xmin - buffer, ymin - buffer, xmax + buffer, ymax + buffer)
+
+
+def _fetch_export_dem(bbox_nztm, buffer, note=None, corridor_nztm=None):
+    """Crop LINZ's national LiDAR mosaic via the Export API and return
+    (elevation array, transform, nodata) — one bulk raster download instead
+    of one HTTP request per point. Returns None (not an error) on any
+    failure — missing/under-scoped API key, LINZ outage, job error, timeout,
+    or genuinely no coverage there — so the caller can report "no coverage"
+    cleanly rather than surfacing which specific step failed."""
+    api_key = os.environ.get("LINZ_API_KEY", "")
+    if not api_key:
+        return None
+    headers = {"Authorization": "key " + api_key, "Content-Type": "application/json"}
+    polygon_nztm = _export_corridor(bbox_nztm, buffer, corridor_nztm=corridor_nztm)
+    body = {
+        "crs": "EPSG:2193",
+        "formats": {"grid": "image/tiff;subtype=geotiff"},
+        "extent": {"type": "Polygon", "coordinates": [_export_polygon_wgs84(polygon_nztm)]},
+        "items": [{"item": EXPORT_LAYER_URL}],
+    }
+    try:
+        if note:
+            note("No bundled tile coverage here — requesting an elevation "
+                 "export from LINZ's national mosaic…")
+        r = requests.post("https://data.linz.govt.nz/services/api/v1/exports/",
+                           headers=headers, json=body, timeout=EXPORT_TIMEOUT)
+        if r.status_code != 201:
+            print(f"[export] create failed: {r.status_code} {r.text[:500]}")
+            return None
+        job = r.json()
+        deadline = time.time() + EXPORT_POLL_TIMEOUT
+        while True:
+            if time.time() > deadline:
+                print(f"[export] poll timed out after {EXPORT_POLL_TIMEOUT}s, "
+                      f"last state={job.get('state')}")
+                return None
+            time.sleep(EXPORT_POLL_INTERVAL)
+            jr = requests.get(job["url"], headers=headers, timeout=EXPORT_TIMEOUT)
+            if jr.status_code != 200:
+                print(f"[export] poll failed: {jr.status_code} {jr.text[:500]}")
+                return None
+            job = jr.json()
+            if job["state"] == "complete":
+                break
+            if job["state"] in ("error", "cancelled", "gone"):
+                print(f"[export] job ended in state={job['state']}: {job}")
+                return None
+
+        if note:
+            size_mb = (job.get("size_complete_zipped") or 0) / 1e6
+            note(f"Export ready ({size_mb:.0f} MB) — downloading…")
+        # Bandwidth-bound, not latency-bound: a wide/long trail's export can
+        # run tens of MB, so this needs real headroom on a slow connection
+        # rather than a short timeout that reads as a hang.
+        zr = requests.get(job["download_url"], headers=headers, timeout=300)
+        if zr.status_code != 200:
+            print(f"[export] download failed: {zr.status_code} {zr.text[:500]}")
+            return None
+        with zipfile.ZipFile(io.BytesIO(zr.content)) as zf:
+            tif_name = next((n for n in zf.namelist() if n.lower().endswith(".tif")), None)
+            if tif_name is None:
+                print(f"[export] no .tif in zip, contents: {zf.namelist()}")
+                return None
+            tif_bytes = zf.read(tif_name)
+        with MemoryFile(tif_bytes) as memfile:
+            with memfile.open() as src:
+                return src.read(1).astype(float), src.transform, src.nodata
+    except Exception:
+        import traceback
+        print("[export] unexpected exception:")
+        traceback.print_exc()
+        return None
+
+
+def _cached_export_dem(bbox_nztm, trail_name, buffer, note=None, corridor_nztm=None):
+    """Disk-cached wrapper around _fetch_export_dem, keyed by trail + rounded
+    bbox/corridor, so a single audit's main sample, sideslope sample, terrain
+    preview and 3D view share one export instead of each triggering their own
+    job."""
+    corridor_key = round(corridor_nztm.length, 1) if corridor_nztm is not None else None
+    key = hashlib.md5(json.dumps(
+        [round(v, 1) for v in bbox_nztm] + [buffer, corridor_key]).encode()).hexdigest()[:10]
+    path = os.path.join(CACHE_DIR, f"{trail_name}_export_121859_{key}.tif")
+    if os.path.exists(path):
+        with open(path, "rb") as f:
+            tif_bytes = f.read()
+        with MemoryFile(tif_bytes) as memfile:
+            with memfile.open() as src:
+                return src.read(1).astype(float), src.transform, src.nodata
+    result = _fetch_export_dem(bbox_nztm, buffer, note=note, corridor_nztm=corridor_nztm)
+    if result is None:
+        return None
+    arr, transform, nodata = result
+    with MemoryFile() as memfile:
+        with memfile.open(driver="GTiff", height=arr.shape[0], width=arr.shape[1],
+                           count=1, dtype=arr.dtype, crs="EPSG:2193",
+                           transform=transform, nodata=nodata) as dst:
+            dst.write(arr, 1)
+        with open(path, "wb") as f:
+            f.write(memfile.read())
+    return arr, transform, nodata
 
 # (grade, average gradient max %, absolute gradient max %, out-of-spec tolerance %)
 GRADIENT_GRADES = [
@@ -107,6 +282,43 @@ def _load_local_dtm(bbox_nztm, buffer=60, dem_source=None):
     buf, _ = load_dtm_fast(DTM_FOLDER, bbox_nztm, buffer=buffer)
     with rasterio.open(buf) as src:
         return src.read(1), src.transform, None
+
+
+def _try_local_dtm(bbox_nztm, buffer=60):
+    """Like _load_local_dtm, but returns None instead of raising when the
+    bundled Canterbury/Christchurch tiles aren't configured or don't cover
+    this trail — so callers can fall back to the live national mosaic rather
+    than fail outright."""
+    try:
+        return _load_local_dtm(bbox_nztm, buffer=buffer)
+    except ValueError:
+        return None
+
+
+def get_dem_source(bbox_nztm, trail_name, dem_source=None, buffer=60, note=None,
+                    corridor_nztm=None):
+    """Resolve a DEM for bbox_nztm, trying each source in order: an uploaded
+    file, the bundled local Canterbury/Christchurch tiles, then LINZ's Export
+    API. corridor_nztm (a shapely LineString) lets the export fallback crop
+    to a tight buffer around the trail's own line rather than its bounding
+    rectangle — matters for winding/looping trails, where the bbox can cover
+    many times the area the trail actually passes through. Returns (array,
+    transform, nodata, source) where source is 'uploaded', 'local' or
+    'export'; raises ValueError if nothing covers this area."""
+    if dem_source is not None:
+        return dem_source[0], dem_source[1], dem_source[2], "uploaded"
+    local = _try_local_dtm(bbox_nztm, buffer=buffer)
+    if local is not None:
+        return local[0], local[1], local[2], "local"
+    exported = _cached_export_dem(bbox_nztm, trail_name, buffer, note=note,
+                                   corridor_nztm=corridor_nztm)
+    if exported is not None:
+        return exported[0], exported[1], exported[2], "export"
+    raise ValueError(
+        "No LiDAR coverage for this area — it's outside the bundled "
+        "Canterbury/Christchurch tiles, and LINZ's national mosaic export "
+        "found nothing here (either no LiDAR survey covers it, or the "
+        "export API is unavailable right now).")
 
 
 def parse_kml(kml_bytes):
@@ -211,29 +423,34 @@ TERRAIN_BUFFER_M = 60
 TERRAIN_HS_AZIMUTHS = (225, 270, 315, 360)
 
 
-def terrain_overlays(points_wgs84, buffer_m=TERRAIN_BUFFER_M, vert_exag=1.5, dem_source=None):
+def terrain_overlays(points_wgs84, buffer_m=TERRAIN_BUFFER_M, vert_exag=1.5, dem_source=None,
+                      trail_name="Trail", progress=None):
     """Same method as Askins' precomputed hillshade/slope: shade the native
-    1 m local DEM directly (no coarse resampling), multidirectional so the
-    bench cut reads clearly, rather than a single low-angle light."""
+    1 m DEM directly (no coarse resampling), multidirectional so the bench
+    cut reads clearly, rather than a single low-angle light. Outside the
+    bundled Canterbury/Christchurch tiles, get_dem_source transparently pulls
+    a 1 m export from LINZ's national mosaic instead — same resolution, same
+    hillshade math, just a different source array."""
     points_nztm = [to_nztm.transform(lon, lat) for lon, lat in points_wgs84]
     xs = [p[0] for p in points_nztm]
     ys = [p[1] for p in points_nztm]
-    xmin, xmax = min(xs) - buffer_m, max(xs) + buffer_m
-    ymin, ymax = min(ys) - buffer_m, max(ys) + buffer_m
+    bbox = [min(xs), min(ys), max(xs), max(ys)]
 
-    arr, transform, nodata = _load_local_dtm([xmin, ymin, xmax, ymax], buffer=0, dem_source=dem_source)
+    arr, transform, nodata, _source = get_dem_source(
+        bbox, trail_name, dem_source=dem_source, buffer=buffer_m, note=progress,
+        corridor_nztm=LineString(points_nztm))
     elev_grid = arr.astype(float)
     if nodata is None:
         elev_grid[elev_grid < -90] = np.nan  # AAIGrid NODATA_value (-99), bundled dataset
     elif not (isinstance(nodata, float) and math.isnan(nodata)):
         elev_grid[elev_grid == nodata] = np.nan
-    if np.isnan(elev_grid).all():
-        raise ValueError("No local LiDAR DEM coverage for this area.")
-    if np.isnan(elev_grid).any():
-        elev_grid = np.where(np.isnan(elev_grid), np.nanmean(elev_grid), elev_grid)
-
     cellsize_x = transform.a
     cellsize_y = -transform.e
+
+    if np.isnan(elev_grid).all():
+        raise ValueError("No LiDAR coverage (bundled or national) for this area.")
+    if np.isnan(elev_grid).any():
+        elev_grid = np.where(np.isnan(elev_grid), np.nanmean(elev_grid), elev_grid)
 
     ls_stack = [LightSource(azdeg=az, altdeg=45) for az in TERRAIN_HS_AZIMUTHS]
     hillshade_avg = np.mean(
@@ -246,8 +463,11 @@ def terrain_overlays(points_wgs84, buffer_m=TERRAIN_BUFFER_M, vert_exag=1.5, dem
     slope_rgba = plt.cm.gray(1 - np.clip(slope_deg / 45, 0, 1))
 
     ny, nx = elev_grid.shape
-    sw_lon, sw_lat = to_wgs84.transform(xmin, ymin)
-    ne_lon, ne_lat = to_wgs84.transform(xmax, ymax)
+    # Actual raster bounds, not the (pre-buffer) point bbox: with a corridor
+    # export the two can differ, and local-tile merges pad internally too.
+    left, bottom, right, top = array_bounds(ny, nx, transform)
+    sw_lon, sw_lat = to_wgs84.transform(left, bottom)
+    ne_lon, ne_lat = to_wgs84.transform(right, top)
 
     return {
         "hillshade_data_uri": _array_png_b64(hillshade_rgba),
@@ -275,20 +495,30 @@ def run_audit(kml_bytes, trail_name="Trail", stated_grade=4, progress=None, want
                           (line.interpolate(d) for d in np.arange(0, line.length, 1.0))]
     points_wgs84_dense = [to_wgs84.transform(x, y) for x, y in points_nztm_dense]
 
-    # ---- elevations (local 1 m LiDAR DEM) ----
-    note(f"Sampling {len(points_nztm_dense)} elevations from local LiDAR DEM…")
+    # ---- elevations (local 1 m LiDAR DEM, falling back to a LINZ national-
+    # mosaic export outside the bundled Canterbury/Christchurch tiles) ----
     xs_d = [p[0] for p in points_nztm_dense]
     ys_d = [p[1] for p in points_nztm_dense]
-    arr, transform, _nodata = _load_local_dtm(
-        [min(xs_d), min(ys_d), max(xs_d), max(ys_d)], dem_source=dem_source)
+    bbox = [min(xs_d), min(ys_d), max(xs_d), max(ys_d)]
+    note(f"Sampling {len(points_nztm_dense)} elevations…")
+    arr, transform, _nodata, source = get_dem_source(
+        bbox, trail_name, dem_source=dem_source, note=note, corridor_nztm=line)
+    local_source = (arr, transform, _nodata)
+    if source == "export":
+        note("Exported elevation data from LINZ's national mosaic — sampling…")
     elevations_dense = [sample_raster(arr, transform, x, y) for x, y in points_nztm_dense]
 
     keep = [i for i, e in enumerate(elevations_dense) if not np.isnan(e)]
     if len(keep) < 10:
-        if dem_source is not None:
+        if source == "uploaded":
             raise ValueError(
                 "Too few elevations came back from the uploaded DEM (%d of %d) — "
                 "check the trail falls inside the DEM's extent." % (len(keep), len(elevations_dense)))
+        if source == "export":
+            raise ValueError(
+                "Too few elevations came back from LINZ's national LiDAR mosaic "
+                "export (%d of %d) — this trail falls outside NZ's current LiDAR "
+                "survey coverage." % (len(keep), len(elevations_dense)))
         raise ValueError(
             "Too few elevations came back from the local LiDAR DEM (%d of %d) — "
             "check the trail falls inside the tile coverage configured in "
@@ -378,6 +608,10 @@ def run_audit(kml_bytes, trail_name="Trail", stated_grade=4, progress=None, want
             cx, cy = points_nztm_dense[i]
             sample_pts += [(cx + d * math.cos(b), cy + d * math.sin(b)) for d in offsets]
 
+        # Same raster as the main centreline sample (local tiles or export,
+        # whichever get_dem_source resolved above) — its buffer already
+        # covers the +/-8 m sideslope offsets, so no separate fetch needed.
+        arr, transform, _nodata = local_source
         ss_elevs = [sample_raster(arr, transform, x, y) for x, y in sample_pts]
 
         def sideslope_band(a):
@@ -638,9 +872,10 @@ def render_plot3d(result, grid_size=60, margin=150, dem_source=None):
     grid_e = np.linspace(min(eastings) - margin, max(eastings) + margin, grid_size)
     grid_n = np.linspace(min(northings) - margin, max(northings) + margin, grid_size)
 
-    arr, transform, _nodata = _load_local_dtm(
-        [min(eastings), min(northings), max(eastings), max(northings)], buffer=margin,
-        dem_source=dem_source)
+    bbox = [min(eastings), min(northings), max(eastings), max(northings)]
+    arr, transform, _nodata, _source = get_dem_source(
+        bbox, result["trail_name"], dem_source=dem_source, buffer=margin,
+        corridor_nztm=LineString(points_nztm_dense))
     Z = np.array([[sample_raster(arr, transform, e, n) for e in grid_e] for n in grid_n],
                  dtype=float)
     E_grid, N_grid = np.meshgrid(grid_e, grid_n)

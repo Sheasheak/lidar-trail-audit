@@ -130,11 +130,14 @@
 // ---- LINZ API key (LDS). NOTE: exposed client-side; restrict the key by
 // domain in your LINZ account before any public deploy. ----
 const LINZ_KEY = "24d5daf2151847f7b7db497b10ea8712";
-const AERIAL = "https://tiles-cdn.koordinates.com/services;key=" + LINZ_KEY +
-               "/tiles/v4/layer=123118,style=auto/EPSG:3857/{z}/{x}/{y}.png";
-const attribution = "Imagery: LINZ CC BY 4.0 | LiDAR DEM: LINZ";
+// LINZ Basemaps' "aerial" tileset is the nationwide mosaic (5cm urban down to
+// 10m satellite for full NZ coverage) — layer 123118 used here previously was
+// "Christchurch 0.075m Urban Aerial Photos", which only has imagery for
+// Christchurch City/Lyttelton Harbour and renders blank everywhere else.
+const AERIAL = "https://basemaps.linz.govt.nz/v1/tiles/aerial/WebMercatorQuad/{z}/{x}/{y}.webp?api=" + LINZ_KEY;
+const attribution = "Imagery: LINZ CC BY 4.0 (Basemaps) | LiDAR DEM: LINZ";
 
-const aerial = L.tileLayer(AERIAL, { maxZoom: 22, maxNativeZoom: 22, attribution });
+const aerial = L.tileLayer(AERIAL, { maxZoom: 22, maxNativeZoom: 21, attribution });
 const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
              { maxZoom: 19, attribution: "© OpenStreetMap" });
 
