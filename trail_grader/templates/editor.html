@@ -114,7 +114,7 @@
   <div class="grp">
     <h2>Custom DEM</h2>
     <label class="row" style="display:block">Upload a GeoTIFF: <input id="demFile" type="file" accept=".tif,.tiff"></label>
-    <div class="hint" id="demStatus">Bundled data only covers Canterbury/Christchurch. To edit and grade a trail elsewhere, export a DEM GeoTIFF for its area (e.g. from <a href="https://data.linz.govt.nz" target="_blank" rel="noopener">LINZ Data Service</a>) and upload it here.</div>
+    <div class="hint" id="demStatus">Bundled 1 m data covers Canterbury/Christchurch directly; elsewhere the tool pulls a matching export from LINZ's national LiDAR mosaic automatically (check the "LiDAR coverage" map layer above). Only needed here if you want to override with your own DEM — e.g. from <a href="https://data.linz.govt.nz" target="_blank" rel="noopener">LINZ Data Service</a>.</div>
   </div>
 
   <div class="grp">
@@ -146,9 +146,20 @@ const map = L.map("map", { center: ASKINS.center, zoom: 16, layers: [aerial] });
 const hillshade = L.imageOverlay("{{ url_for('static', filename='hillshade.png') }}", ASKINS.hillshadeBounds, { opacity: 0.55 });
 const slope     = L.imageOverlay("{{ url_for('static', filename='slope.png') }}",     ASKINS.slopeBounds,     { opacity: 0.55 });
 
+// LINZ "NZ LiDAR 1m DEM Survey Index" (layer 121943) — the actual survey
+// footprints that make up the national mosaic grading falls back to outside
+// Canterbury/Christchurch. Rendered as LINZ's own styled vector tiles (grey
+// fill over covered ground, transparent elsewhere) so it's cheap to draw at
+// any zoom rather than pulling the whole country's survey polygons client-side.
+const coverage = L.tileLayer(
+  "https://tiles-cdn.koordinates.com/services;key=" + LINZ_KEY +
+  "/tiles/v4/layer=121943,style=auto/EPSG:3857/{z}/{x}/{y}.png",
+  { maxZoom: 22, maxNativeZoom: 18, opacity: 0.45,
+    attribution: "LiDAR coverage: LINZ NZ 1m DEM Survey Index" });
+
 L.control.layers(
   { "LINZ aerial (2025)": aerial, "OpenStreetMap": osm },
-  { "LiDAR hillshade": hillshade, "LiDAR slope": slope },
+  { "LiDAR hillshade": hillshade, "LiDAR slope": slope, "LiDAR coverage (NZ)": coverage },
   { collapsed: false }
 ).addTo(map);
 
