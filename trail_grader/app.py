@@ -175,6 +175,19 @@ def _render_input(error=None, status=200):
     return render_template('input.html', error=error), status
 
 
+@app.errorhandler(429)
+def _rate_limited(e):
+    """Flask-Limiter's default 429 is a plain HTML page, which the editor's
+    fetch()-based routes choke on (.json() throws a cryptic "Unexpected
+    token '<'" instead of showing the actual message) — match each route's
+    normal response shape instead. description carries the limit that was
+    hit (e.g. "10 per 1 hour")."""
+    message = 'Too many requests (%s) — try again shortly.' % getattr(e, 'description', 'rate limit hit')
+    if request.path.startswith('/editor/') or request.path.endswith('/summary'):
+        return jsonify({'error': message}), 429
+    return _render_input(message, 429)
+
+
 @app.route('/')
 def index():
     """Front door is the trail line editor — correcting the line and hitting
