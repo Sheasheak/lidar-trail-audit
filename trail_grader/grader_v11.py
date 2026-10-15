@@ -65,6 +65,13 @@ EXPORT_LAYER_URL = "https://data.linz.govt.nz/services/api/v1/layers/121859/"
 EXPORT_TIMEOUT = 20
 EXPORT_POLL_INTERVAL = 2
 EXPORT_POLL_TIMEOUT = 180
+# Reading the full raster into memory is unavoidable (sampling needs the
+# whole array), so an unbounded trail area is an unbounded memory request —
+# this is what pushed the Render instance over its limit and triggered an
+# OOM restart. 150 MB is comfortably past any normal trail's export size
+# (a 15.6 km stress-test trail measured ~54 MB) while still catching a
+# pathologically large bbox before it's downloaded, not after.
+EXPORT_MAX_UNZIPPED_BYTES = 150 * 1024 * 1024
 
 
 def _export_polygon_wgs84(polygon_nztm):
@@ -112,7 +119,7 @@ def _export_corridor(bbox_nztm, buffer, corridor_nztm=None):
     return box(xmin - buffer, ymin - buffer, xmax + buffer, ymax + buffer)
 
 
-def _fetch_export_dem(bbox_nztm, buffer, note=None, corridor_nztm=None):
+def _fetch_export_dem(bbox_nztm, buffer, note=None, corridor_nztm=None, cache_path=None):
     """Crop LINZ's national LiDAR mosaic via the Export API and return
     (elevation array, transform, nodata) — one bulk raster download instead
     of one HTTP request per point. Returns None (not an error) on any
@@ -140,6 +147,14 @@ def _fetch_export_dem(bbox_nztm, buffer, note=None, corridor_nztm=None):
             print(f"[export] create failed: {r.status_code} {r.text[:500]}")
             return None
         job = r.json()
+        est = job.get("size_estimate_unzipped")
+        if est and est > EXPORT_MAX_UNZIPPED_BYTES:
+            print(f"[export] estimated size {est/1e6:.0f} MB exceeds cap "
+                  f"{EXPORT_MAX_UNZIPPED_BYTES/1e6:.0f} MB, aborting (trail area too large)")
+            if note:
+                note(f"That area is too large to export automatically "
+                     f"(~{est/1e6:.0f} MB) — try a shorter trail or upload your own DEM.")
+            return None
         deadline = time.time() + EXPORT_POLL_TIMEOUT
         while True:
             if time.time() > deadline:
@@ -158,6 +173,14 @@ def _fetch_export_dem(bbox_nztm, buffer, note=None, corridor_nztm=None):
                 print(f"[export] job ended in state={job['state']}: {job}")
                 return None
 
+        actual = job.get("size_complete_unzipped")
+        if actual and actual > EXPORT_MAX_UNZIPPED_BYTES:
+            print(f"[export] actual size {actual/1e6:.0f} MB exceeds cap "
+                  f"{EXPORT_MAX_UNZIPPED_BYTES/1e6:.0f} MB, aborting before download")
+            if note:
+                note(f"That area turned out too large to process (~{actual/1e6:.0f} MB) "
+                     f"— try a shorter trail or upload your own DEM.")
+            return None
         if note:
             size_mb = (job.get("size_complete_zipped") or 0) / 1e6
             note(f"Export ready ({size_mb:.0f} MB) — downloading…")
@@ -168,15 +191,29 @@ def _fetch_export_dem(bbox_nztm, buffer, note=None, corridor_nztm=None):
         if zr.status_code != 200:
             print(f"[export] download failed: {zr.status_code} {zr.text[:500]}")
             return None
-        with zipfile.ZipFile(io.BytesIO(zr.content)) as zf:
+        zip_bytes = zr.content
+        del zr  # drop the response object (and any internal buffering) once we have the body
+        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
             tif_name = next((n for n in zf.namelist() if n.lower().endswith(".tif")), None)
             if tif_name is None:
                 print(f"[export] no .tif in zip, contents: {zf.namelist()}")
                 return None
             tif_bytes = zf.read(tif_name)
+        del zip_bytes
+        if cache_path is not None:
+            # Write the downloaded bytes straight to disk and read back from
+            # there, rather than also round-tripping through a second
+            # in-memory GeoTIFF encode — a DEM for a long trail can be tens
+            # of MB, and holding zip + tif + re-encoded copies at once is
+            # exactly what pushed the service over its memory limit.
+            with open(cache_path, "wb") as f:
+                f.write(tif_bytes)
+            del tif_bytes
+            with rasterio.open(cache_path) as src:
+                return src.read(1), src.transform, src.nodata
         with MemoryFile(tif_bytes) as memfile:
             with memfile.open() as src:
-                return src.read(1).astype(float), src.transform, src.nodata
+                return src.read(1), src.transform, src.nodata
     except Exception:
         import traceback
         print("[export] unexpected exception:")
@@ -194,23 +231,10 @@ def _cached_export_dem(bbox_nztm, trail_name, buffer, note=None, corridor_nztm=N
         [round(v, 1) for v in bbox_nztm] + [buffer, corridor_key]).encode()).hexdigest()[:10]
     path = os.path.join(CACHE_DIR, f"{trail_name}_export_121859_{key}.tif")
     if os.path.exists(path):
-        with open(path, "rb") as f:
-            tif_bytes = f.read()
-        with MemoryFile(tif_bytes) as memfile:
-            with memfile.open() as src:
-                return src.read(1).astype(float), src.transform, src.nodata
-    result = _fetch_export_dem(bbox_nztm, buffer, note=note, corridor_nztm=corridor_nztm)
-    if result is None:
-        return None
-    arr, transform, nodata = result
-    with MemoryFile() as memfile:
-        with memfile.open(driver="GTiff", height=arr.shape[0], width=arr.shape[1],
-                           count=1, dtype=arr.dtype, crs="EPSG:2193",
-                           transform=transform, nodata=nodata) as dst:
-            dst.write(arr, 1)
-        with open(path, "wb") as f:
-            f.write(memfile.read())
-    return arr, transform, nodata
+        with rasterio.open(path) as src:
+            return src.read(1), src.transform, src.nodata
+    return _fetch_export_dem(bbox_nztm, buffer, note=note, corridor_nztm=corridor_nztm,
+                              cache_path=path)
 
 # (grade, average gradient max %, absolute gradient max %, out-of-spec tolerance %)
 GRADIENT_GRADES = [
@@ -295,6 +319,26 @@ def _try_local_dtm(bbox_nztm, buffer=60):
         return None
 
 
+def _mask_nodata(arr, nodata):
+    """Replace nodata sentinel cells with NaN so sample_raster's existing
+    np.isnan() check filters them out, instead of silently treating a
+    sentinel (e.g. the Export API's -9999) as a literal, wildly-wrong
+    elevation. The bundled local tiles don't carry a nodata value through
+    their merge (comes back None even though the source AAIGrid tiles use
+    -99), so fall back to the same very-negative-value heuristic already
+    used for them — safe here since nothing in NZ sits below -90 m."""
+    if arr.dtype.kind != "f":
+        return arr
+    # In-place rather than np.where (which would allocate a second
+    # full-size array) — each caller already holds a freshly-read array,
+    # not a shared/cached object, so mutating it is safe.
+    if nodata is not None and not (isinstance(nodata, float) and math.isnan(nodata)):
+        arr[arr == nodata] = np.nan
+    else:
+        arr[arr < -90] = np.nan
+    return arr
+
+
 def get_dem_source(bbox_nztm, trail_name, dem_source=None, buffer=60, note=None,
                     corridor_nztm=None):
     """Resolve a DEM for bbox_nztm, trying each source in order: an uploaded
@@ -306,14 +350,17 @@ def get_dem_source(bbox_nztm, trail_name, dem_source=None, buffer=60, note=None,
     transform, nodata, source) where source is 'uploaded', 'local' or
     'export'; raises ValueError if nothing covers this area."""
     if dem_source is not None:
-        return dem_source[0], dem_source[1], dem_source[2], "uploaded"
+        arr, transform, nodata = dem_source
+        return _mask_nodata(arr, nodata), transform, nodata, "uploaded"
     local = _try_local_dtm(bbox_nztm, buffer=buffer)
     if local is not None:
-        return local[0], local[1], local[2], "local"
+        arr, transform, nodata = local
+        return _mask_nodata(arr, nodata), transform, nodata, "local"
     exported = _cached_export_dem(bbox_nztm, trail_name, buffer, note=note,
                                    corridor_nztm=corridor_nztm)
     if exported is not None:
-        return exported[0], exported[1], exported[2], "export"
+        arr, transform, nodata = exported
+        return _mask_nodata(arr, nodata), transform, nodata, "export"
     raise ValueError(
         "No LiDAR coverage for this area — it's outside the bundled "
         "Canterbury/Christchurch tiles, and LINZ's national mosaic export "
@@ -439,11 +486,11 @@ def terrain_overlays(points_wgs84, buffer_m=TERRAIN_BUFFER_M, vert_exag=1.5, dem
     arr, transform, nodata, _source = get_dem_source(
         bbox, trail_name, dem_source=dem_source, buffer=buffer_m, note=progress,
         corridor_nztm=LineString(points_nztm))
-    elev_grid = arr.astype(float)
-    if nodata is None:
-        elev_grid[elev_grid < -90] = np.nan  # AAIGrid NODATA_value (-99), bundled dataset
-    elif not (isinstance(nodata, float) and math.isnan(nodata)):
-        elev_grid[elev_grid == nodata] = np.nan
+    # get_dem_source already nodata-masks arr to NaN regardless of source;
+    # copy=False is a no-op when it's already float32 (bundled tiles and
+    # LINZ exports both are) — avoids silently doubling a large trail's
+    # raster to float64 just to be safe for the int-array case.
+    elev_grid = arr.astype(np.float32, copy=False)
     cellsize_x = transform.a
     cellsize_y = -transform.e
 
