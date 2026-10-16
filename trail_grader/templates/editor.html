@@ -49,6 +49,19 @@
     font-family: var(--font-body); font-size: 13px;
     color: var(--ink-3); font-weight: 600; margin: 0 0 10px;
   }
+  /* Collapsible sections: essentials stay open, the rest toggle closed by
+     default — full feature set is one click away, not all on screen at once. */
+  details.grp summary {
+    font-family: var(--font-body); font-size: 13px;
+    color: var(--ink-3); font-weight: 600;
+    cursor: pointer; list-style: none; user-select: none;
+    display: flex; align-items: center; gap: 6px;
+  }
+  details.grp summary::-webkit-details-marker { display: none; }
+  details.grp summary::before { content: "▸"; font-size: 10px; color: var(--ink-3); transition: transform 0.15s; }
+  details.grp[open] summary::before { transform: rotate(90deg); }
+  details.grp summary:hover { color: var(--ink); }
+  details.grp .grp-body { margin-top: 10px; }
   button {
     width: 100%; padding: 10px; margin: 4px 0;
     font-family: var(--font-body); font-size: 13.5px; font-weight: 600;
@@ -87,13 +100,15 @@
     </div>
   </div>
 
-  <div class="grp">
-    <h2>DEM overlay opacity</h2>
-    <label class="row">Hillshade <input id="hsOp" type="range" min="0" max="1" step="0.05" value="0.55"></label>
-    <label class="row">Slope <input id="slOp" type="range" min="0" max="1" step="0.05" value="0.55"></label>
-    <div class="hint">Hillshade/slope reveal the graded bench under tree canopy where aerial can't see it.</div>
-    <div class="hint" id="terrainStatus"></div>
-  </div>
+  <details class="grp">
+    <summary>DEM overlay opacity</summary>
+    <div class="grp-body">
+      <label class="row">Hillshade <input id="hsOp" type="range" min="0" max="1" step="0.05" value="0.55"></label>
+      <label class="row">Slope <input id="slOp" type="range" min="0" max="1" step="0.05" value="0.55"></label>
+      <div class="hint">Hillshade/slope reveal the graded bench under tree canopy where aerial can't see it.</div>
+      <div class="hint" id="terrainStatus"></div>
+    </div>
+  </details>
 
   <div class="grp">
     <h2>Trail</h2>
@@ -104,18 +119,22 @@
     <div class="hint">Load any Trailforks/GPS KML to edit a different trail — hillshade/slope regenerate live from LINZ for wherever it is (coarse grid, can take up to a minute).</div>
   </div>
 
-  <div class="grp">
-    <h2>Export corrected line</h2>
-    <button id="expKml" class="sec">Download KML</button>
-    <button id="expGeo" class="sec">Download GeoJSON</button>
-    <div class="hint">Feed the exported file back into your grading pipeline to measure the accuracy gain.</div>
-  </div>
+  <details class="grp">
+    <summary>Export corrected line</summary>
+    <div class="grp-body">
+      <button id="expKml" class="sec">Download KML</button>
+      <button id="expGeo" class="sec">Download GeoJSON</button>
+      <div class="hint">Feed the exported file back into your grading pipeline to measure the accuracy gain.</div>
+    </div>
+  </details>
 
-  <div class="grp">
-    <h2>Custom DEM</h2>
-    <label class="row" style="display:block">Upload a GeoTIFF: <input id="demFile" type="file" accept=".tif,.tiff"></label>
-    <div class="hint" id="demStatus">Bundled 1 m data covers Canterbury/Christchurch directly; elsewhere the tool pulls a matching export from LINZ's national LiDAR mosaic automatically (check the "LiDAR coverage" map layer above). Only needed here if you want to override with your own DEM — e.g. from <a href="https://data.linz.govt.nz" target="_blank" rel="noopener">LINZ Data Service</a>.</div>
-  </div>
+  <details class="grp">
+    <summary>Custom DEM</summary>
+    <div class="grp-body">
+      <label class="row" style="display:block">Upload a GeoTIFF: <input id="demFile" type="file" accept=".tif,.tiff"></label>
+      <div class="hint" id="demStatus">Bundled 1 m data covers Canterbury/Christchurch directly; elsewhere the tool pulls a matching export from LINZ's national LiDAR mosaic automatically (check the "LiDAR coverage" map layer above). Only needed here if you want to override with your own DEM — e.g. from <a href="https://data.linz.govt.nz" target="_blank" rel="noopener">LINZ Data Service</a>.</div>
+    </div>
+  </details>
 
   <div class="grp">
     <h2>Finish</h2>

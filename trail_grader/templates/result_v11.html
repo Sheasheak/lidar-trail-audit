@@ -192,11 +192,16 @@
       <h2>3D terrain</h2>
       <div class="note">Fetches a live terrain grid from LINZ — can take a moment</div>
     </div>
-    <div class="card">
-      <iframe src="{{ url_for('run_plot3d', run_id=run_id) }}"
-              style="width:100%;height:820px;border:1px solid var(--hairline);display:block"
-              title="3D terrain view"></iframe>
-    </div>
+    <details class="card" id="plot3d-details" style="padding:0">
+      <summary style="padding:16px 20px;cursor:pointer;font-weight:600;font-size:14px;list-style:none">
+        Show 3D terrain view
+      </summary>
+      <div style="padding:0 20px 20px">
+        <iframe id="plot3d-frame" data-src="{{ url_for('run_plot3d', run_id=run_id) }}"
+                style="width:100%;height:820px;border:1px solid var(--hairline);display:block"
+                title="3D terrain view"></iframe>
+      </div>
+    </details>
   </section>
 
   <!-- ================= PLAN VIEW ================= -->
@@ -284,6 +289,22 @@ function showVerdict(grade, gradeName) {
     mismatch.innerHTML = `<p><strong>Signposted grade matches the measured grade.</strong></p>`;
   }
 }
+
+// 3D terrain is the one section that triggers its own live LINZ fetch on
+// load — collapsed by default so loading the results page doesn't always
+// pay for it, and the iframe only gets a src (starting that fetch) the
+// first time it's actually opened.
+const plot3dDetails = document.getElementById('plot3d-details');
+const plot3dSummary = plot3dDetails.querySelector('summary');
+plot3dDetails.addEventListener('toggle', () => {
+  if (plot3dDetails.open) {
+    const frame = document.getElementById('plot3d-frame');
+    if (!frame.src) frame.src = frame.dataset.src;
+    plot3dSummary.textContent = 'Hide 3D terrain view';
+  } else {
+    plot3dSummary.textContent = 'Show 3D terrain view';
+  }
+});
 
 document.querySelectorAll('.toggle-btn').forEach(btn => {
   const target = document.getElementById(btn.dataset.target);
