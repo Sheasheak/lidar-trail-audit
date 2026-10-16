@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+<title>TrailSafe — LiDAR Trail Audit</title>
+<meta name="description" content="Automated mountain bike trail grading from LiDAR elevation data, graded against the NZ MTB Trail Design & Construction Guidelines.">
+<link rel="stylesheet" href="{{ url_for('static', filename='audit.css') }}">
+<style>
+  .hero {
+    padding: 64px 0 48px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .hero .eyebrow { justify-content: flex-start; }
+  .hero h1 {
+    font-family: var(--font-display); font-weight: 600;
+    font-size: 44px; line-height: 1.15; margin: 10px 0 16px;
+    max-width: 18ch;
+  }
+  .hero .lede { font-size: 17px; color: var(--ink-2); max-width: 58ch; margin: 0 0 28px; }
+  .hero .cta-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+  .hero .cta-row .sub { font-size: 13px; color: var(--ink-3); }
+  a.btn-link { text-decoration: none; display: inline-block; }
+
+  .pillrow { display: flex; gap: 8px; flex-wrap: wrap; margin: 18px 0 0; }
+  .pill {
+    font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-2);
+    background: var(--surface); border: 1px solid var(--rule);
+    border-radius: 999px; padding: 4px 11px;
+  }
+
+  .step-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 14px;
+  }
+  .step { background: var(--surface); border-radius: 8px; padding: 18px 20px; }
+  .step .n {
+    font-family: var(--font-mono); font-size: 12px; color: var(--accent);
+    font-weight: 700; margin-bottom: 8px;
+  }
+  .step h3 { font-family: var(--font-body); font-size: 14.5px; margin: 0 0 6px; }
+  .step p { font-size: 13px; color: var(--ink-2); margin: 0; }
+
+  .roadmap-card { border: 1px dashed var(--rule); background: transparent; }
+  .roadmap-badge {
+    display: inline-block; font-family: var(--font-mono); font-size: 10.5px;
+    letter-spacing: 0.04em; text-transform: uppercase;
+    color: var(--ink-3); border: 1px solid var(--rule); border-radius: 4px;
+    padding: 2px 8px; margin-bottom: 10px;
+  }
+
+  footer { margin-top: 60px; }
+</style>
+</head>
+<body>
+<div class="sheet wide">
+
+  <section class="hero" style="margin-top:0">
+    <p class="eyebrow">
+      <span class="title" style="color:var(--ink);font-weight:600">TrailSafe</span>
+      <span>LiDAR trail audit</span>
+    </p>
+    <h1>Grade a trail from the terrain, not a stopwatch.</h1>
+    <p class="lede">
+      Give it a trail line and TrailSafe samples 1&nbsp;m LiDAR elevation along it, measures
+      gradient, turn radius and cross-slope at every metre, and grades the result against the
+      <strong>NZ Mountain Bike Trail Design &amp; Construction Guidelines</strong> — automatically,
+      in about 30 seconds, anywhere in New Zealand with LiDAR coverage.
+    </p>
+    <div class="cta-row">
+      <a class="btn-link" href="{{ url_for('editor') }}"><button type="button" class="primary">Grade a trail →</button></a>
+      <a class="btn-link" href="{{ url_for('grade_form') }}"><button type="button" class="ghost">Manual grading form</button></a>
+      <span class="sub">No GIS experience needed — draw a line or upload a KML.</span>
+    </div>
+    <div class="pillrow">
+      <span class="pill">Live LINZ 1 m LiDAR</span>
+      <span class="pill">NZ MTB Guidelines, Recreation Aotearoa</span>
+      <span class="pill">Nationwide coverage</span>
+      <span class="pill">Out-of-grade section reporting</span>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>How it works</h2>
+      <div class="note">Trail line in, graded result out</div>
+    </div>
+    <div class="step-grid">
+      <div class="step">
+        <div class="n">01</div>
+        <h3>Give it a line</h3>
+        <p>Draw it in the trail editor over aerial imagery, or upload a Trailforks/GPS KML export.</p>
+      </div>
+      <div class="step">
+        <div class="n">02</div>
+        <h3>Sample the terrain</h3>
+        <p>1 m bare-earth LiDAR elevation along every metre of the line — local tiles in Canterbury/Christchurch, LINZ's national mosaic everywhere else with coverage.</p>
+      </div>
+      <div class="step">
+        <div class="n">03</div>
+        <h3>Measure and grade</h3>
+        <p>Gradient, turn radius and cross-slope computed at every station, graded against the signposted grade's own thresholds from the guidelines.</p>
+      </div>
+      <div class="step">
+        <div class="n">04</div>
+        <h3>See exactly what's out</h3>
+        <p>Not just pass/fail — every out-of-grade section listed individually with its length, so you know what needs regrading or realigning.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>Built for inspectors, not GIS analysts</h2>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <h3>No spatial-analysis background required</h3>
+        <p class="card-sub" style="margin-bottom:0">
+          Load a trail line, click Done, read the result. The interactive map, gradient profile
+          and 3D terrain view are built to be read at a glance — the detail is there when you want
+          to drill in, not forced on you up front.
+        </p>
+      </div>
+      <div class="card">
+        <h3>Works beyond Christchurch</h3>
+        <p class="card-sub" style="margin-bottom:0">
+          The 1 m LiDAR mosaic covers most of the country now, not just Canterbury — the trail
+          editor has a coverage layer so you can check before you start.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>What's next</h2>
+      <div class="note">In development</div>
+    </div>
+    <div class="grid-2">
+      <div class="card roadmap-card">
+        <span class="roadmap-badge">Planned</span>
+        <h3>AI trail camera integration</h3>
+        <p class="card-sub" style="margin-bottom:0">
+          Bare-earth LiDAR can't see roots, rocks, jump lips, or loose surface — the things a
+          rider actually feels. The plan is to bring in trailside or rider-mounted camera footage,
+          with AI flagging technical features and hazards LiDAR misses, feeding into the same
+          grading pipeline as a live field-observation layer instead of a manual checklist.
+        </p>
+      </div>
+      <div class="card roadmap-card">
+        <span class="roadmap-badge">Planned</span>
+        <h3>Automatic trail surface classification</h3>
+        <p class="card-sub" style="margin-bottom:0">
+          Surface condition (sealed, compacted, loose, natural/mud) currently needs a rider to
+          note it by hand, since it directly affects grade but isn't visible in a bare-earth
+          elevation model. The camera/AI layer above is intended to classify it automatically
+          instead, straight from footage.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span class="mono">Elevation © LINZ, CC BY 4.0</span>
+    <span class="mono">Thresholds © Recreation Aotearoa 2022</span>
+  </footer>
+
+</div>
+</body>
+</html>

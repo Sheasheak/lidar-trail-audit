@@ -190,9 +190,10 @@ def _rate_limited(e):
 
 @app.route('/')
 def index():
-    """Front door is the trail line editor — correcting the line and hitting
-    'Done' feeds straight into /audit, so it's the natural start of the flow."""
-    return render_template('editor.html')
+    """Landing page — what the tool is and what's coming next, with a clear
+    way into the actual editor rather than dropping a first-time visitor
+    straight into it."""
+    return render_template('landing.html')
 
 
 @app.route('/editor')
