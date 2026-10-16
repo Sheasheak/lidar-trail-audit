@@ -146,6 +146,13 @@ const map = L.map("map", { center: ASKINS.center, zoom: 16, layers: [aerial] });
 const hillshade = L.imageOverlay("{{ url_for('static', filename='hillshade.png') }}", ASKINS.hillshadeBounds, { opacity: 0.55 });
 const slope     = L.imageOverlay("{{ url_for('static', filename='slope.png') }}",     ASKINS.slopeBounds,     { opacity: 0.55 });
 
+// Leaflet's default panes put tile layers (tilePane, z=200) below image/
+// vector overlays (overlayPane, z=400) regardless of which was toggled on
+// more recently — so the coverage tile layer needs its own pane above both,
+// or it would always render under hillshade/slope rather than on top of them.
+map.createPane("coveragePane");
+map.getPane("coveragePane").style.zIndex = 450;
+
 // LINZ "NZ LiDAR 1m DEM Survey Index" (layer 121943) — the actual survey
 // footprints that make up the national mosaic grading falls back to outside
 // Canterbury/Christchurch. Rendered as LINZ's own styled vector tiles (grey
@@ -154,7 +161,7 @@ const slope     = L.imageOverlay("{{ url_for('static', filename='slope.png') }}"
 const coverage = L.tileLayer(
   "https://tiles-cdn.koordinates.com/services;key=" + LINZ_KEY +
   "/tiles/v4/layer=121943,style=auto/EPSG:3857/{z}/{x}/{y}.png",
-  { maxZoom: 22, maxNativeZoom: 18, opacity: 0.45,
+  { maxZoom: 22, maxNativeZoom: 18, opacity: 0.45, pane: "coveragePane",
     attribution: "LiDAR coverage: LINZ NZ 1m DEM Survey Index" });
 
 L.control.layers(
