@@ -407,6 +407,40 @@ def steep_sideslope_runs(sideslopes, station_step, threshold_deg=STEEP_SIDESLOPE
     return runs
 
 
+def _exceedance_runs(stations_values, station_step, is_bad, worse):
+    """Group consecutive out-of-spec samples into contiguous chainage runs —
+    same shape as steep_sideslope_runs, generalised for gradient (above a
+    limit) and turn radius (below a limit). stations_values is a list of
+    (chainage_m, value); worse(a, b) returns whichever of two values is more
+    out-of-spec, for tracking each run's peak. DOC asked for this
+    specifically: individual out-of-grade sections with their length in
+    metres, so an inspector can total it against the guidelines' tolerance
+    for the signposted grade, rather than just seeing one aggregate %."""
+    runs, cur = [], None
+    for i, v in stations_values:
+        bad = is_bad(v)
+        if bad:
+            if cur is not None and i - cur["end_m"] <= station_step:
+                cur["end_m"] = i
+                cur["peak"] = worse(cur["peak"], v)
+            else:
+                if cur is not None:
+                    runs.append(cur)
+                cur = {"start_m": i, "end_m": i, "peak": v}
+        elif cur is not None:
+            runs.append(cur)
+            cur = None
+    if cur is not None:
+        runs.append(cur)
+    for r in runs:
+        r["length_m"] = r["end_m"] - r["start_m"] + station_step
+        # float(): gradient values come from a numpy array (np.float64),
+        # radius values from pure-Python math — normalise both to plain
+        # Python floats so the result dict stays JSON-serialisable.
+        r["peak"] = float(round(r["peak"], 1))
+    return runs
+
+
 def circumradius(p1, p2, p3):
     (ax, ay), (bx, by), (cx, cy) = p1, p2, p3
     a, b, c = math.dist(p1, p2), math.dist(p2, p3), math.dist(p1, p3)
@@ -602,6 +636,21 @@ def run_audit(kml_bytes, trail_name="Trail", stated_grade=4, progress=None, want
                                 f"steepest {worst_gradient:.1f}% ({cap})")
             break
 
+    # ---- out-of-grade sections (gradient), against the STATED/signposted
+    # grade specifically — DOC wants each section individually with its
+    # length in metres, so an inspector can total it against the
+    # guidelines' tolerance for that grade and see at a glance whether the
+    # track passes or needs regrading/realigning. ----
+    stated_abs_limit = GRADIENT_ABS_MAX[stated_grade]
+    gradient_offset = window // 2  # smoothed_dense[i] ~= chainage i+offset (convolve('valid') drops window-1 samples)
+    gradient_exceedances = _exceedance_runs(
+        [(i + gradient_offset, v) for i, v in enumerate(smoothed_dense)],
+        station_step=1, is_bad=lambda v: abs(v) > stated_abs_limit,
+        worse=lambda a, b: a if abs(a) >= abs(b) else b)
+    gradient_out_length_m = round(sum(r["length_m"] for r in gradient_exceedances), 1)
+    gradient_out_pct = round(gradient_out_length_m / line.length * 100, 1) if line.length else 0.0
+    gradient_tolerance_pct = next(t for g, _, _, t in GRADIENT_GRADES if g == stated_grade)
+
     # ---- corner radius ----
     step = 5
     radii_sampled = [
@@ -623,6 +672,14 @@ def run_audit(kml_bytes, trail_name="Trail", stated_grade=4, progress=None, want
             radius_reason = (f"{pct_out:.1f}% under {min_radius} m (tolerance {tolerance}%), "
                               f"tightest {tightest:.1f} m (floor {one_harder} m)")
             break
+
+    # ---- out-of-grade sections (turn radius), same approach as gradient ----
+    radius_exceedances = _exceedance_runs(
+        [(step + i, v) for i, v in enumerate(radii_sampled)],
+        station_step=1, is_bad=lambda v: v < stated_min, worse=min)
+    radius_out_length_m = round(sum(r["length_m"] for r in radius_exceedances), 1)
+    radius_out_pct = round(radius_out_length_m / line.length * 100, 1) if line.length else 0.0
+    radius_tolerance_pct = next(t for g, _, t in RADIUS_GRADES if g == stated_grade)
 
     overall_grade = max(gradient_grade, radius_grade)
 
@@ -690,7 +747,7 @@ def run_audit(kml_bytes, trail_name="Trail", stated_grade=4, progress=None, want
 
     # ---- gradient profile (matplotlib PNG) ----
     note("Drawing charts…")
-    abs_limit = GRADIENT_ABS_MAX[stated_grade]
+    abs_limit = stated_abs_limit  # same value, computed earlier alongside gradient_exceedances
     x = np.arange(len(smoothed_dense))
     y = np.asarray(smoothed_dense)
     fig, ax = plt.subplots(figsize=(12, 5))
@@ -747,6 +804,14 @@ def run_audit(kml_bytes, trail_name="Trail", stated_grade=4, progress=None, want
         "worst_gradient": round(worst_gradient, 1),
         "tightest_corner": None if math.isinf(tightest) else round(tightest, 1),
         "pct_under_stated_min": round(under, 1),
+        "gradient_exceedances": gradient_exceedances,
+        "gradient_out_length_m": gradient_out_length_m,
+        "gradient_out_pct": gradient_out_pct,
+        "gradient_tolerance_pct": gradient_tolerance_pct,
+        "radius_exceedances": radius_exceedances,
+        "radius_out_length_m": radius_out_length_m,
+        "radius_out_pct": radius_out_pct,
+        "radius_tolerance_pct": radius_tolerance_pct,
         "n_corners": len(corners),
         "mean_abs_sideslope": round(mean_abs_sideslope, 1) if mean_abs_sideslope is not None else None,
         "pct_steep_sideslope": round(pct_steep_sideslope, 1) if pct_steep_sideslope is not None else None,
