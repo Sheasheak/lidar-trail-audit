@@ -161,7 +161,7 @@ map.getPane("coveragePane").style.zIndex = 450;
 const coverage = L.tileLayer(
   "https://tiles-cdn.koordinates.com/services;key=" + LINZ_KEY +
   "/tiles/v4/layer=121943,style=auto/EPSG:3857/{z}/{x}/{y}.png",
-  { maxZoom: 22, maxNativeZoom: 18, opacity: 0.65, pane: "coveragePane",
+  { maxZoom: 22, maxNativeZoom: 18, opacity: 0.85, pane: "coveragePane",
     attribution: "LiDAR coverage: LINZ NZ 1m DEM Survey Index" });
 
 L.control.layers(
