@@ -11,18 +11,18 @@
 <div class="sheet">
 
   <header class="titleblock">
-    <p class="eyebrow"><span>LiDAR Trail Audit</span><span>Manual grading form</span><a href="{{ url_for('index') }}" style="margin-left:auto">← Trail line editor</a></p>
+    <p class="eyebrow"><span>TrailSafe</span><span>Quick audit — no map editing</span><a href="{{ url_for('index') }}" style="margin-left:auto">← Home</a></p>
     <h1>Grade a trail</h1>
     <p class="subtitle">
-      Give it a trail line and a stated grade. It samples elevation live from the LINZ
-      raster API along the line, works out gradient and turn radius at every station,
-      and grades the result against the NZ MTB Trail Design &amp; Construction Guidelines.
+      Give it a trail line and a stated grade. It samples 1 m LiDAR elevation along the
+      line, works out gradient and turn radius at every station, and grades the result
+      against the NZ MTB Trail Design &amp; Construction Guidelines. Two choices, one
+      button — if you need to correct a trail line against aerial imagery first, use the
+      <a href="{{ url_for('editor') }}">trail editor</a> instead.
     </p>
     <dl class="fields">
-      <div class="field"><dt>Elevation</dt><dd>LINZ raster API (live)</dd></div>
-      <div class="field"><dt>Standard</dt><dd>Recreation Aotearoa, 2022</dd></div>
-      <div class="field"><dt>Working CRS</dt><dd>NZTM2000 · EPSG:2193</dd></div>
-      <div class="field"><dt>Pipeline</dt><dd>TrailAudit_v11</dd></div>
+      <div class="field"><dt>Elevation</dt><dd>1 m LiDAR, nationwide</dd></div>
+      <div class="field"><dt>Standard</dt><dd>NZ MTB Guidelines, Recreation Aotearoa 2022</dd></div>
     </dl>
   </header>
 
@@ -97,7 +97,7 @@
 
     <div style="display:flex;gap:20px;align-items:center;margin-top:32px;flex-wrap:wrap">
       <button type="submit" class="primary" id="go">Run the audit →</button>
-      <span class="working" id="working"><span class="spinner"></span> Fetching elevations from LINZ live — this can take a minute or two on a first run.</span>
+      <span class="working" id="working"><span class="spinner"></span> Grading — usually under a minute; a bit longer the first time for a trail outside Canterbury/Christchurch.</span>
     </div>
   </form>
 
