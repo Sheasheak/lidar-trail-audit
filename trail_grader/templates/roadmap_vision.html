@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+<title>AI Trail Camera Integration — Roadmap — TrailSafe</title>
+<meta name="description" content="R&D status for TrailSafe's production-grade AI trail camera hazard-detection pipeline.">
+<link rel="stylesheet" href="{{ url_for('static', filename='audit.css') }}">
+<style>
+  :root {
+    --esri-blue: #0079c1;
+    --esri-blue-dark: #00507a;
+    --esri-teal: #00a9b7;
+    --esri-panel: #ffffff;
+    --esri-rail: #f2f4f6;
+    --esri-rail-ink: #5c6670;
+    --esri-rule: #dde2e6;
+  }
+
+  body { background: #e9edf0; }
+  .sheet.wide { max-width: 1280px; }
+
+  /* ---------- app chrome ---------- */
+  .appbar {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 0; border-bottom: 2px solid var(--esri-blue);
+    margin-bottom: 0;
+  }
+  .appbar .logo {
+    font-family: var(--font-display); font-weight: 700; font-size: 15px;
+    color: var(--ink); letter-spacing: -0.01em;
+  }
+  .appbar .logo span { color: var(--esri-blue); }
+  .crumb {
+    font-family: var(--font-mono); font-size: 12px; color: var(--esri-rail-ink);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .crumb a { color: var(--esri-rail-ink); text-decoration: none; }
+  .crumb a:hover { color: var(--esri-blue); text-decoration: underline; }
+
+  .app-shell {
+    display: grid; grid-template-columns: 220px 1fr; gap: 0;
+    background: var(--esri-panel);
+    border: 1px solid var(--esri-rule);
+    margin-top: 0;
+    min-height: 70vh;
+  }
+
+  /* ---------- sidebar ---------- */
+  .rail {
+    background: var(--esri-rail);
+    border-right: 1px solid var(--esri-rule);
+    padding: 18px 0;
+  }
+  .rail-label {
+    font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--esri-rail-ink);
+    padding: 0 18px; margin-bottom: 8px;
+  }
+  .rail a {
+    display: block; padding: 8px 18px; font-size: 13px; color: var(--ink-2);
+    text-decoration: none; border-left: 3px solid transparent;
+  }
+  .rail a:hover { background: #e4e9ed; color: var(--ink); }
+  .rail a.current { border-left-color: var(--esri-blue); color: var(--esri-blue); font-weight: 600; background: #e4edf4; }
+  .rail hr { border: 0; border-top: 1px solid var(--esri-rule); margin: 14px 0; }
+
+  /* ---------- main panel ---------- */
+  .panel-main { padding: 28px 32px 40px; }
+
+  .page-head h1 {
+    font-family: var(--font-display); font-weight: 700; font-size: 26px;
+    margin: 0 0 8px; color: var(--ink);
+  }
+  .page-head .lede { font-size: 14.5px; color: var(--ink-2); max-width: 70ch; margin: 0 0 16px; }
+
+  .status-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 26px; }
+  .chip {
+    font-family: var(--font-mono); font-size: 11px; font-weight: 700;
+    letter-spacing: 0.02em; text-transform: uppercase;
+    padding: 4px 10px; border-radius: 3px; display: inline-flex; align-items: center; gap: 6px;
+  }
+  .chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+  .chip.research { background: #fff4de; color: #8a5a00; }
+  .chip.research::before { background: #e8a400; }
+  .chip.planned { background: #e9edf0; color: #5c6670; }
+  .chip.planned::before { background: #9aa4ac; }
+  .chip.live { background: #e3f6e6; color: #1c7a34; }
+  .chip.live::before { background: #2fb34f; }
+  .chip.blocked { background: #fdeaea; color: #b3302f; }
+  .chip.blocked::before { background: #d64545; }
+
+  /* ---------- pipeline diagram ---------- */
+  .pipeline {
+    display: grid; grid-template-columns: repeat(6, 1fr); gap: 0;
+    margin: 0 0 32px; border: 1px solid var(--esri-rule); border-radius: 6px; overflow: hidden;
+  }
+  .pipe-stage {
+    background: var(--esri-panel); padding: 14px 12px 16px; position: relative;
+    border-right: 1px solid var(--esri-rule);
+  }
+  .pipe-stage:last-child { border-right: 0; }
+  .pipe-stage .pn {
+    font-family: var(--font-mono); font-size: 10px; color: var(--esri-rail-ink); margin-bottom: 6px;
+  }
+  .pipe-stage h4 {
+    font-family: var(--font-body); font-size: 12.5px; font-weight: 700; margin: 0 0 8px; line-height: 1.3;
+    color: var(--ink);
+  }
+  .pipe-stage .chip { font-size: 9.5px; padding: 3px 7px; }
+  .pipe-stage::after {
+    content: "→"; position: absolute; right: -11px; top: 50%; transform: translateY(-50%);
+    color: var(--esri-rail-ink); font-size: 14px; z-index: 1; background: var(--esri-panel);
+    width: 20px; text-align: center;
+  }
+  .pipe-stage:last-child::after { content: ""; }
+
+  /* ---------- stage detail cards ---------- */
+  .stage-card {
+    border: 1px solid var(--esri-rule); border-radius: 6px; margin-bottom: 16px; overflow: hidden; scroll-margin-top: 20px;
+  }
+  .stage-card .sc-head {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 14px 18px; background: var(--esri-rail); border-bottom: 1px solid var(--esri-rule);
+  }
+  .stage-card .sc-head .idx {
+    font-family: var(--font-mono); font-size: 11px; color: var(--esri-blue); font-weight: 700;
+    background: #e4edf4; border-radius: 3px; padding: 2px 8px;
+  }
+  .stage-card .sc-head h3 { font-family: var(--font-body); font-size: 15px; margin: 0; flex: 1; min-width: 160px; }
+  .stage-card .sc-body { padding: 16px 18px 18px; }
+  .stage-card .sc-body p { font-size: 13.5px; color: var(--ink-2); margin: 0 0 12px; max-width: 76ch; }
+  .sc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-top: 12px; }
+  .sc-block { background: var(--esri-rail); border-radius: 5px; padding: 12px 14px; }
+  .sc-block .k {
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase;
+    color: var(--esri-rail-ink); margin-bottom: 6px;
+  }
+  .sc-block ul { margin: 0; padding-left: 16px; font-size: 12.5px; color: var(--ink-2); }
+  .sc-block li { margin-bottom: 3px; }
+
+  /* ---------- comparison table ---------- */
+  .spec-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+  .spec-table th, .spec-table td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--esri-rule); vertical-align: top; }
+  .spec-table thead th {
+    font-family: var(--font-mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em;
+    color: var(--esri-rail-ink); background: var(--esri-rail); border-bottom: 1px solid var(--esri-rule);
+  }
+  .spec-table td.yes { color: #1c7a34; font-weight: 600; }
+  .spec-table td.no { color: #b3302f; }
+
+  .callout {
+    border-left: 3px solid var(--esri-blue); background: #f2f8fc;
+    padding: 14px 18px; border-radius: 0 5px 5px 0; margin: 20px 0;
+    font-size: 13.5px; color: var(--ink-2);
+  }
+  .callout strong { color: var(--ink); }
+
+  .footbar {
+    display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;
+    padding: 18px 0 40px; font-size: 12.5px; color: var(--ink-3);
+  }
+
+  @media (max-width: 860px) {
+    .app-shell { grid-template-columns: 1fr; }
+    .rail { border-right: 0; border-bottom: 1px solid var(--esri-rule); }
+    .pipeline { grid-template-columns: repeat(2, 1fr); }
+    .pipe-stage::after { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="sheet wide">
+
+  <div class="appbar">
+    <span class="logo">Trail<span>Safe</span></span>
+    <span class="crumb"><a href="{{ url_for('index') }}">TrailSafe</a> / Roadmap / AI Trail Camera Integration</span>
+  </div>
+
+  <div class="app-shell">
+    <nav class="rail">
+      <div class="rail-label">On this page</div>
+      <a href="#overview">Overview</a>
+      <a href="#pipeline">Pipeline</a>
+      <a href="#capture">1. Capture</a>
+      <a href="#align">2. Chainage alignment</a>
+      <a href="#model">3. Detection model</a>
+      <a href="#data">4. Training data</a>
+      <a href="#fusion">5. Fusion with LiDAR</a>
+      <a href="#review">6. Field review UI</a>
+      <hr>
+      <a href="#why-hard">Why this is the hard version</a>
+      <a href="{{ url_for('index') }}" class="current">← Back to TrailSafe</a>
+    </nav>
+
+    <div class="panel-main">
+      <div class="page-head" id="overview">
+        <h1>AI Trail Camera Integration</h1>
+        <p class="lede">
+          Bare-earth LiDAR grades gradient, turn radius and cross-slope with high confidence — but it can't see
+          roots, loose rock, jump lips, or surface condition, because those sit above the bare-earth model entirely.
+          This page tracks the production-grade computer-vision pipeline intended to close that gap: a
+          rider-mounted or trailside camera feed, automatically flagging technical features and hazards, fused
+          into the same grading output as the LiDAR layers.
+        </p>
+      </div>
+
+      <div class="status-row">
+        <span class="chip research">Research phase</span>
+        <span class="chip blocked">No labelled training data yet</span>
+        <span class="chip planned">Not integrated into grading pipeline</span>
+      </div>
+
+      <div class="callout">
+        <strong>Honest status:</strong> nothing on this page is built yet. This is the architecture TrailSafe is
+        designing toward, published so DOC and anyone else following the project can see the actual shape of the
+        plan — and where it's currently stuck — rather than a vague "AI camera, coming soon." A much smaller,
+        faster prototype (sampling GPS-tagged frames through an existing vision-capable language model, no custom
+        training) is the realistic near-term step; it isn't what's documented below.
+      </div>
+
+      <section id="pipeline">
+        <div class="sec-head"><h2>Pipeline</h2><div class="note">Six stages, footage to graded output</div></div>
+        <div class="pipeline">
+          <div class="pipe-stage"><div class="pn">01</div><h4>Capture</h4><span class="chip planned">Planned</span></div>
+          <div class="pipe-stage"><div class="pn">02</div><h4>Chainage alignment</h4><span class="chip planned">Planned</span></div>
+          <div class="pipe-stage"><div class="pn">03</div><h4>Detection model</h4><span class="chip research">Research</span></div>
+          <div class="pipe-stage"><div class="pn">04</div><h4>Training data</h4><span class="chip blocked">Blocked</span></div>
+          <div class="pipe-stage"><div class="pn">05</div><h4>Fusion with LiDAR</h4><span class="chip planned">Planned</span></div>
+          <div class="pipe-stage"><div class="pn">06</div><h4>Field review UI</h4><span class="chip planned">Planned</span></div>
+        </div>
+      </section>
+
+      <section>
+        <div class="sec-head"><h2>Stage detail</h2><div class="note">What each stage needs, and what's blocking it</div></div>
+
+        <div class="stage-card" id="capture">
+          <div class="sc-head"><span class="idx">01</span><h3>Capture</h3><span class="chip planned">Planned</span></div>
+          <div class="sc-body">
+            <p>Rider-mounted or trailside camera footage, GPS-synced so every frame can later be placed at a
+              chainage position along the same trail line LiDAR already samples. Action cameras with onboard GPS
+              (GoPro GPMF metadata, phone-logged tracks) make this the most tractable stage — it's closer to data
+              logistics than research.</p>
+            <div class="sc-grid">
+              <div class="sc-block"><div class="k">Needs</div><ul>
+                <li>GPS-tagged footage source (rider-mounted or fixed trailside units)</li>
+                <li>A consistent upload path into TrailSafe</li>
+              </ul></div>
+              <div class="sc-block"><div class="k">Open questions</div><ul>
+                <li>Rider-mounted (per-audit, variable coverage) vs fixed trailside cameras (continuous, costly to deploy at scale)</li>
+                <li>Storage cost of raw video at any meaningful trail-network scale</li>
+              </ul></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stage-card" id="align">
+          <div class="sc-head"><span class="idx">02</span><h3>Chainage alignment</h3><span class="chip planned">Planned</span></div>
+          <div class="sc-body">
+            <p>Matching each frame's GPS fix to the nearest station on the already-sampled trail line, so a
+              detected hazard lands on the same 1 m chainage grid as the gradient/radius/sideslope data — not a
+              separate, disconnected location system.</p>
+            <div class="sc-grid">
+              <div class="sc-block"><div class="k">Needs</div><ul>
+                <li>GPS accuracy/drift correction (consumer GPS can be several metres off under canopy)</li>
+                <li>A snap-to-line routine against the existing trail geometry</li>
+              </ul></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stage-card" id="model">
+          <div class="sc-head"><span class="idx">03</span><h3>Detection model</h3><span class="chip research">Research</span></div>
+          <div class="sc-body">
+            <p>The actual computer-vision model: given a frame or short clip, classify trail-specific hazard and
+              feature classes — roots, loose rock, jump lips, drops, erosion, surface type. This is the stage
+              that decides whether the whole pipeline is worth building, and it's the one with no settled answer
+              yet.</p>
+            <div class="sc-grid">
+              <div class="sc-block"><div class="k">Candidate approaches</div><ul>
+                <li>Custom-trained detector (YOLO-family or similar) on trail-hazard classes — fast at inference, needs labelled data</li>
+                <li>General-purpose vision-language model prompted per frame — needs no training, far higher per-frame cost, unproven accuracy on trail-specific hazards</li>
+              </ul></div>
+              <div class="sc-block"><div class="k">Open questions</div><ul>
+                <li>Real-time (on-device/edge) vs batch processing of uploaded footage after a ride</li>
+                <li>Accuracy target before a flagged hazard is trustworthy enough to act on unreviewed</li>
+              </ul></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stage-card" id="data">
+          <div class="sc-head"><span class="idx">04</span><h3>Training data</h3><span class="chip blocked">Blocked</span></div>
+          <div class="sc-body">
+            <p>The actual bottleneck. A custom detector needs a labelled dataset of NZ mountain bike trail footage
+              with hazards and features annotated frame-by-frame — roots, rocks, jump lips, surface condition. No
+              such public dataset exists. Building one means filming a representative spread of trail types and
+              grades, then manually labelling it, which is a slow, unglamorous prerequisite that has to happen
+              before stage 03 can move past "research."</p>
+            <div class="sc-grid">
+              <div class="sc-block"><div class="k">Needs</div><ul>
+                <li>A trail-footage corpus spanning grades 1–6 and surface types</li>
+                <li>A labelling scheme matching the hazard/feature classes stage 03 needs</li>
+                <li>Volunteer or paid annotation effort — this doesn't automate</li>
+              </ul></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stage-card" id="fusion">
+          <div class="sc-head"><span class="idx">05</span><h3>Fusion with LiDAR grading</h3><span class="chip planned">Planned</span></div>
+          <div class="sc-body">
+            <p>Feeding detected hazards into the existing grading pipeline as a field-observation layer, the same
+              role manual field notes play today — shown on the map alongside the gradient/radius/sideslope
+              layers already live, at the chainage stage 02 computed, instead of a separate report.</p>
+            <div class="sc-grid">
+              <div class="sc-block"><div class="k">Already built, reusable</div><ul>
+                <li>The out-of-grade map-layer/toggle pattern (gradient, turn radius, sideslope)</li>
+                <li>Manual field-note pin dropping — the interim version of this, already live</li>
+              </ul></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stage-card" id="review">
+          <div class="sc-head"><span class="idx">06</span><h3>Field review UI</h3><span class="chip planned">Planned</span></div>
+          <div class="sc-body">
+            <p>Automated detection won't be trusted unreviewed from day one — an inspector needs a fast way to
+              confirm or dismiss each flagged frame before it counts toward a grade. This is the human-in-the-loop
+              layer that makes an imperfect model usable in practice.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="why-hard">
+        <div class="sec-head"><h2>LiDAR vs camera — what each can actually see</h2></div>
+        <table class="spec-table">
+          <thead><tr><th>Trail property</th><th>Bare-earth LiDAR (live today)</th><th>Camera + AI (this roadmap)</th></tr></thead>
+          <tbody>
+            <tr><td>Gradient, turn radius</td><td class="yes">Yes — graded automatically</td><td>Not needed</td></tr>
+            <tr><td>Cross-slope / sideslope exposure</td><td class="yes">Yes — graded automatically</td><td>Not needed</td></tr>
+            <tr><td>Roots, loose rock</td><td class="no">No — sits above the bare-earth surface</td><td class="yes">Target capability</td></tr>
+            <tr><td>Jump lips, drops, tabletops</td><td class="no">No</td><td class="yes">Target capability</td></tr>
+            <tr><td>Surface condition (sealed/loose/mud)</td><td class="no">No</td><td class="yes">Target capability</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <div class="footbar">
+        <span>TrailSafe — LiDAR Trail Audit</span>
+        <a href="{{ url_for('index') }}" style="color:var(--esri-blue)">← Back to TrailSafe</a>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

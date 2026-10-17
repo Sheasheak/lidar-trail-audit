@@ -209,6 +209,15 @@ def editor():
     return render_template('editor.html')
 
 
+@app.route('/roadmap/vision')
+def roadmap_vision():
+    """R&D status page for the AI trail camera / hazard-detection roadmap
+    item — the "hard version" (custom-trained, production-grade computer
+    vision), as opposed to the frame-sampled vision-LLM prototype path.
+    Static page, no backend logic."""
+    return render_template('roadmap_vision.html')
+
+
 @app.route('/editor/terrain', methods=['POST'])
 @limiter.limit("30 per minute")
 def editor_terrain():
