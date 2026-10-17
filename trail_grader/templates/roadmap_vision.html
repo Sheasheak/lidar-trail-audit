@@ -234,10 +234,16 @@
     padding: 18px 0 40px; font-size: 12.5px; color: var(--ink-3);
   }
 
-  @media (max-width: 860px) {
+  /* Keep the icon rail — it's the tool's main visual signature — as long as
+     possible; drop the wider text nav first, then the icon rail only on
+     genuinely narrow/mobile widths. */
+  @media (max-width: 980px) {
+    .app-shell { grid-template-columns: 54px 1fr; }
+    .rail { display: none; }
+  }
+  @media (max-width: 560px) {
     .app-shell { grid-template-columns: 1fr; }
     .icon-rail { display: none; }
-    .rail { border-right: 0; border-bottom: 1px solid var(--esri-rule); }
     .pipeline { grid-template-columns: repeat(2, 1fr); }
     .pipe-stage::after { display: none; }
   }
