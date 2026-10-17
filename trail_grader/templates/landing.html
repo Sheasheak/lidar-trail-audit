@@ -12,27 +12,39 @@
 
   .hero {
     position: relative;
-    padding: 76px 0 54px;
+    padding: 84px 0 64px;
     border-bottom: 1px solid var(--rule);
     overflow: hidden;
-  }
-  .hero::before {
-    content: "";
-    position: absolute; top: -220px; right: -160px;
-    width: 620px; height: 620px; border-radius: 50%;
-    background: radial-gradient(circle at 60% 40%, rgba(28,92,171,0.16), rgba(28,92,171,0) 65%);
-    pointer-events: none;
-  }
-  .hero::after {
-    content: "";
-    position: absolute; inset: 0;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='480' height='480'%3E%3Cg fill='none' stroke='%231c5cab' stroke-width='1.1'%3E%3Cpath d='M-20 48 Q 70 10 140 48 T 280 50 T 420 46 T 540 52' opacity='0.14'/%3E%3Cpath d='M-20 128 Q 80 92 150 130 T 290 126 T 430 132 T 540 128' opacity='0.12'/%3E%3Cpath d='M-20 208 Q 60 240 150 206 T 280 212 T 420 206 T 540 210' opacity='0.14'/%3E%3Cpath d='M-20 296 Q 90 330 160 294 T 300 300 T 440 296 T 540 298' opacity='0.1'/%3E%3Cpath d='M-20 376 Q 70 344 150 380 T 290 376 T 430 382 T 540 378' opacity='0.12'/%3E%3C/g%3E%3C/svg%3E");
-    background-size: 480px 480px;
-    -webkit-mask-image: linear-gradient(to bottom, black, transparent 88%);
-    mask-image: linear-gradient(to bottom, black, transparent 88%);
-    pointer-events: none;
+    /* Real trail photo instead of the old abstract contour pattern — dark
+       gradient on the text side so white text stays readable, fading out
+       toward the right so the rider/jump stays visible. */
+    background:
+      linear-gradient(100deg, rgba(8,12,8,0.92) 0%, rgba(8,12,8,0.82) 36%, rgba(8,12,8,0.45) 64%, rgba(8,12,8,0.12) 100%),
+      url("{{ url_for('static', filename='photos/hero-jump.jpg') }}") center 25% / cover no-repeat;
+    /* Scoped override: nearly every text colour in this section already
+       reads from --ink/--ink-2/--ink-3, so redefining them here (rather
+       than touching each rule) flips the whole hero to light-on-photo
+       text for free — same trick the dark theme itself uses elsewhere. */
+    --ink: #ffffff;
+    --ink-2: rgba(255,255,255,0.88);
+    --ink-3: rgba(255,255,255,0.7);
+    /* color itself must be re-set here, not just the --ink custom property:
+       body's own `color: var(--ink)` already resolved to the light-theme
+       dark ink before reaching this element, and plain inheritance passes
+       that resolved colour down, not a live re-evaluation of var(--ink) at
+       each descendant — so h1 (no explicit colour of its own) stayed dark
+       without this. */
+    color: var(--ink);
   }
   .hero-content { position: relative; z-index: 1; animation: fadeUp 0.55s ease both; }
+  /* Pills and the ghost button keep a light chip background regardless of
+     the hero's dark-text override above, so they need their own fixed
+     dark text rather than inheriting the new (white) --ink-2. */
+  .hero .pill, .hero .cta-row button.ghost { color: #2a2e28; }
+  .photo-credit {
+    font-family: var(--font-mono); font-size: 10.5px; color: rgba(255,255,255,0.55);
+  }
+  .hero .photo-credit { position: absolute; right: 14px; bottom: 10px; z-index: 1; }
   .hero .eyebrow { justify-content: flex-start; }
   .hero h1 {
     font-family: var(--font-display); font-weight: 600;
@@ -161,6 +173,7 @@
         <span class="pill">Out-of-grade section reporting</span>
       </div>
     </div>
+    <span class="photo-credit">Photo: Nathanaël Desmeules / Unsplash</span>
   </section>
 
   <section>
@@ -189,6 +202,18 @@
         <h3>See exactly what's out</h3>
         <p>Not just pass/fail — every out-of-grade section listed individually with its length, so you know what needs regrading or realigning.</p>
       </div>
+    </div>
+  </section>
+
+  <section>
+    <div style="position:relative;border-radius:10px;overflow:hidden;height:280px;background:url('{{ url_for('static', filename='photos/forest-trail.jpg') }}') center 35%/cover no-repeat">
+      <div style="position:absolute;inset:0;background:linear-gradient(0deg, rgba(8,12,8,0.78) 0%, rgba(8,12,8,0.15) 55%, rgba(8,12,8,0) 100%);display:flex;align-items:flex-end;padding:20px 24px">
+        <p style="color:#fff;font-size:14px;margin:0;max-width:60ch">
+          Built from footage and terrain just like this — benched singletrack under tree canopy,
+          exactly where aerial imagery alone can't tell you what the tread is actually doing.
+        </p>
+      </div>
+      <span class="photo-credit" style="position:absolute;right:14px;bottom:8px;color:rgba(255,255,255,0.65)">Photo: Chris Henry / Unsplash</span>
     </div>
   </section>
 
