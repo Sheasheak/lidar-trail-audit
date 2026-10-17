@@ -745,6 +745,9 @@ def run_audit(kml_bytes, trail_name="Trail", stated_grade=4, progress=None, want
     else:
         sideslope_exceedances = []
 
+    sideslope_out_length_m = round(sum(r["length_m"] for r in sideslope_exceedances), 1)
+    sideslope_out_pct = round(sideslope_out_length_m / line.length * 100, 1) if line.length else 0.0
+
     # ---- gradient profile (matplotlib PNG) ----
     note("Drawing charts…")
     abs_limit = stated_abs_limit  # same value, computed earlier alongside gradient_exceedances
@@ -818,6 +821,8 @@ def run_audit(kml_bytes, trail_name="Trail", stated_grade=4, progress=None, want
         "sideslopes": sideslopes,
         "sideslope_station_step": station_step,
         "sideslope_exceedances": sideslope_exceedances,
+        "sideslope_out_length_m": sideslope_out_length_m,
+        "sideslope_out_pct": sideslope_out_pct,
         "steep_sideslope_deg": STEEP_SIDESLOPE_DEG,
         "trail_length_m": round(line.length, 1),
         "points_wgs84_dense": points_wgs84_dense,
@@ -896,15 +901,16 @@ def render_folium_map(result):
     # button couldn't show just one or the other; this can.
     gradient_exceed_layer = folium.FeatureGroup(name="Gradient out-of-grade", show=True, control=False)
     radius_exceed_layer = folium.FeatureGroup(name="Turn radius under-grade", show=True, control=False)
+    sideslope_exceed_layer = folium.FeatureGroup(name="Steep sideslope", show=True, control=False)
 
-    def _add_exceed_runs(runs, colour, label, unit, layer):
+    def _add_exceed_runs(runs, colour, label, unit, layer, peak_key="peak"):
         for run in runs:
             lo, hi = max(0, run["start_m"]), min(len(pts) - 1, run["end_m"])
             seg = pts[lo:hi + 1]
             if len(seg) < 2:
                 continue
             tip = (f"{label}: {run['start_m']}-{run['end_m']} m "
-                   f"({run['length_m']} m), peak {run['peak']}{unit}")
+                   f"({run['length_m']} m), peak {run[peak_key]}{unit}")
             folium.PolyLine(locations=[[lat, lon] for lon, lat in seg],
                              color=colour, weight=9, opacity=0.95, dash_array="6,8",
                              tooltip=tip).add_to(layer)
@@ -917,8 +923,12 @@ def render_folium_map(result):
                       "OUT OF GRADE — gradient", "%", gradient_exceed_layer)
     _add_exceed_runs(result.get("radius_exceedances", []), "#00e5ff",
                       "UNDER GRADE — turn radius", " m", radius_exceed_layer)
+    _add_exceed_runs(result.get("sideslope_exceedances", []), "#8800ff",
+                      f"STEEP SIDESLOPE (≥{result.get('steep_sideslope_deg', 30)}°)", "°",
+                      sideslope_exceed_layer, peak_key="peak_deg")
     gradient_exceed_layer.add_to(m)
     radius_exceed_layer.add_to(m)
+    sideslope_exceed_layer.add_to(m)
 
     # ---- manual field notes — a point an inspector drops for something
     # they've spotted on the ground (a root, loose rock, a jump needing
@@ -946,6 +956,7 @@ def render_folium_map(result):
         var map = {m.get_name()};
         var gradientLayer = {gradient_exceed_layer.get_name()};
         var radiusLayer = {radius_exceed_layer.get_name()};
+        var sideslopeLayer = {sideslope_exceed_layer.get_name()};
         var fieldNotesLayer = {field_notes_layer.get_name()};
         var trailName = {json.dumps(result.get("trail_name", "Trail"))};
 
@@ -976,6 +987,7 @@ def render_folium_map(result):
         }}
         map.addControl(new (makeToggleControl(gradientLayer, '#ff00ff', 'gradient out-of-grade'))());
         map.addControl(new (makeToggleControl(radiusLayer, '#00e5ff', 'turn radius under-grade'))());
+        map.addControl(new (makeToggleControl(sideslopeLayer, '#8800ff', 'steep sideslope'))());
 
         // ---- Field notes: click-to-place pins for anything an inspector
         // spots on the ground (surface, roots, rocks, a jump needing work)

@@ -73,6 +73,17 @@
         </button>
         {% endif %}
       </div>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <span>
+          Sideslope: {{ r.sideslope_out_length_m }} m at or above {{ r.steep_sideslope_deg }}°
+          ({{ r.sideslope_out_pct }}% of trail — exposure, not a guideline grade limit)
+        </span>
+        {% if r.sideslope_exceedances %}
+        <button type="button" class="ghost toggle-btn" data-target="sideslope-sections" aria-pressed="false">
+          Show {{ r.sideslope_exceedances|length }} section{{ 's' if r.sideslope_exceedances|length != 1 else '' }}
+        </button>
+        {% endif %}
+      </div>
     </div>
 
     {% if r.gradient_exceedances %}
@@ -94,6 +105,18 @@
       <tbody>
         {% for run in r.radius_exceedances %}
         <tr><td>{{ run.start_m }}–{{ run.end_m }} m</td><td>{{ run.length_m }} m</td><td>{{ run.peak }} m</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+
+    {% if r.sideslope_exceedances %}
+    <table class="flags" id="sideslope-sections" style="display:none;margin-top:16px">
+      <caption style="text-align:left;font-size:12px;color:var(--ink-3);margin-bottom:6px">Sideslope — sections at or above {{ r.steep_sideslope_deg }}°</caption>
+      <thead><tr><th scope="col">Chainage</th><th scope="col">Length</th><th scope="col">Peak sideslope</th></tr></thead>
+      <tbody>
+        {% for run in r.sideslope_exceedances %}
+        <tr><td>{{ run.start_m }}–{{ run.end_m }} m</td><td>{{ run.length_m }} m</td><td>{{ run.peak_deg }}°</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -215,8 +238,10 @@
       <p class="card-sub">
         <span style="color:#ff00ff;font-weight:700">Thick dashed magenta</span> and
         <span style="color:#00e5ff;font-weight:700">cyan</span> mark sections that fail the
-        <em>stated</em> Grade {{ r.stated_grade }}'s own gradient/radius limits — same sections
-        as the table above, on the ground. Everything else is the continuous severity scale:
+        <em>stated</em> Grade {{ r.stated_grade }}'s own gradient/radius limits, and
+        <span style="color:#8800ff;font-weight:700">violet</span> marks sections at or above
+        {{ r.steep_sideslope_deg }}° sideslope — same sections as the tables above, on the ground.
+        Everything else is the continuous severity scale:
         sideslope <span style="color:#00cc00">green</span> &lt;5°,
         <span style="color:#ada800">yellow</span> 5–15°,
         <span style="color:#ff8800">orange</span> 15–30°,
