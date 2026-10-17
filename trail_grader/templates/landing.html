@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
-<title>TrailSafe — LiDAR Trail Audit</title>
+<title>TrailSafe — Turning terrain into answers</title>
 <meta name="description" content="Automated mountain bike trail grading from LiDAR elevation data, graded against the NZ MTB Trail Design & Construction Guidelines.">
 <link rel="stylesheet" href="{{ url_for('static', filename='audit.css') }}">
 <style>
@@ -169,7 +169,7 @@
         <a class="btn-link" href="{{ url_for('auth.login') }}" style="margin-left:auto"><button type="button" class="primary" style="padding:6px 14px;font-size:12.5px">Sign in →</button></a>
         {% endif %}
       </p>
-      <h1>Grade a trail from <span class="grad-text">the terrain</span>, not a stopwatch.</h1>
+      <h1>Turning <span class="grad-text">terrain</span> into answers.</h1>
       <p class="lede">
         Give it a trail line and TrailSafe samples 1&nbsp;m LiDAR elevation along it, measures
         gradient, turn radius and cross-slope at every metre, and grades the result against the
