@@ -37,16 +37,17 @@ import requests
 from rasterio.io import MemoryFile
 from rasterio import warp
 from rasterio.transform import array_bounds
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-from matplotlib.colors import LightSource
-import folium
-import plotly.graph_objects as go
 from pyproj import Transformer
 from shapely.geometry import LineString, box
-from scipy.ndimage import uniform_filter1d
-from pykml import parser as kml_parser
+
+# matplotlib/folium/plotly/scipy/pykml are imported lazily, inside the
+# specific functions that use them, instead of here at module level: this
+# module gets imported unconditionally by app.py, so an eager import here
+# means every worker process pays for all five libraries' memory footprint
+# at startup, even for requests (landing page, login, account browsing)
+# that never touch grading at all. Deferred imports still only pay that
+# cost once per process (sys.modules caches them), just on first actual use
+# rather than on process boot.
 
 from config import get_dtm_folder
 from grader import sample_raster
@@ -369,6 +370,7 @@ def get_dem_source(bbox_nztm, trail_name, dem_source=None, buffer=60, note=None,
 
 
 def parse_kml(kml_bytes):
+    from pykml import parser as kml_parser
     root = kml_parser.parse(io.BytesIO(kml_bytes)).getroot()
     nodes = root.findall(".//{http://www.opengis.net/kml/2.2}coordinates")
     if not nodes:
@@ -530,6 +532,7 @@ def sideslope_color(a):
 
 
 def _png_b64(fig):
+    import matplotlib.pyplot as plt
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=150)
     plt.close(fig)
@@ -538,6 +541,7 @@ def _png_b64(fig):
 
 
 def _array_png_b64(rgba):
+    import matplotlib.pyplot as plt
     buf = io.BytesIO()
     plt.imsave(buf, rgba, format="png")
     buf.seek(0)
@@ -556,6 +560,11 @@ def terrain_overlays(points_wgs84, buffer_m=TERRAIN_BUFFER_M, vert_exag=1.5, dem
     bundled Canterbury/Christchurch tiles, get_dem_source transparently pulls
     a 1 m export from LINZ's national mosaic instead — same resolution, same
     hillshade math, just a different source array."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import LightSource
+
     points_nztm = [to_nztm.transform(lon, lat) for lon, lat in points_wgs84]
     xs = [p[0] for p in points_nztm]
     ys = [p[1] for p in points_nztm]
@@ -799,6 +808,10 @@ def run_audit(kml_bytes, trail_name="Trail", stated_grade=4, progress=None, want
 
     # ---- gradient profile (matplotlib PNG) ----
     note("Drawing charts…")
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from scipy.ndimage import uniform_filter1d
     abs_limit = stated_abs_limit  # same value, computed earlier alongside gradient_exceedances
     x = np.arange(len(smoothed_dense))
     y = np.asarray(smoothed_dense)
@@ -890,6 +903,7 @@ def run_audit(kml_bytes, trail_name="Trail", stated_grade=4, progress=None, want
 
 
 def render_folium_map(result):
+    import folium
     pts = result["points_wgs84_dense"]
     smoothed = result["smoothed_dense"]
     window = result["window"]
@@ -1230,6 +1244,7 @@ _FLYTHROUGH_HTML = """
 
 
 def render_plot3d(result, grid_size=60, margin=150, dem_source=None):
+    import plotly.graph_objects as go
     points_nztm_dense = result["points_nztm_dense"]
     elevations_dense = result["elevations_dense"]
     smoothed_dense = result["smoothed_dense"]
