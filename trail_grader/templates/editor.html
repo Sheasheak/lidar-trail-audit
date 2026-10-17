@@ -89,9 +89,9 @@
   <span>Trail Line Editor</span>
   <a href="{{ url_for('grade_form') }}">Skip to manual grading form →</a>
   {% if current_user.is_authenticated %}
-  <a href="{{ url_for('auth.account') }}" style="margin-left:auto">My account →</a>
+  <a style="margin-left:auto;text-decoration:none" href="{{ url_for('auth.account') }}"><button type="button" class="ghost" style="padding:6px 12px;font-size:12.5px">My account →</button></a>
   {% else %}
-  <a href="{{ url_for('auth.login') }}" style="margin-left:auto">Sign in →</a>
+  <a style="margin-left:auto;text-decoration:none" href="{{ url_for('auth.login') }}"><button type="button" class="primary" style="padding:6px 14px;font-size:12.5px">Sign in →</button></a>
   {% endif %}
 </div>
 
