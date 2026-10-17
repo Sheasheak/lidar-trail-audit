@@ -891,27 +891,43 @@ def render_folium_map(result):
     # dedicated on-map button below instead of being one more checkbox
     # buried in a menu, since this is the one layer that answers "where
     # does this fail its signposted grade" and should be a single click.
-    exceed_layer = folium.FeatureGroup(name="Out-of-grade sections", show=True, control=False)
+    # Separate layers per aspect — gradient sections are OVER the stated
+    # grade's max, radius sections are UNDER its minimum. One combined
+    # button couldn't show just one or the other; this can.
+    gradient_exceed_layer = folium.FeatureGroup(name="Gradient out-of-grade", show=True, control=False)
+    radius_exceed_layer = folium.FeatureGroup(name="Turn radius under-grade", show=True, control=False)
 
-    def _add_exceed_runs(runs, colour, label, unit):
+    def _add_exceed_runs(runs, colour, label, unit, layer):
         for run in runs:
             lo, hi = max(0, run["start_m"]), min(len(pts) - 1, run["end_m"])
             seg = pts[lo:hi + 1]
             if len(seg) < 2:
                 continue
-            tip = (f"OUT OF GRADE — {label}: {run['start_m']}-{run['end_m']} m "
+            tip = (f"{label}: {run['start_m']}-{run['end_m']} m "
                    f"({run['length_m']} m), peak {run['peak']}{unit}")
             folium.PolyLine(locations=[[lat, lon] for lon, lat in seg],
                              color=colour, weight=9, opacity=0.95, dash_array="6,8",
-                             tooltip=tip).add_to(exceed_layer)
+                             tooltip=tip).add_to(layer)
             mid_lon, mid_lat = seg[len(seg) // 2]
             folium.CircleMarker(location=[mid_lat, mid_lon], radius=6, color=colour,
                                  fill=True, fill_opacity=1.0, weight=2,
-                                 tooltip=tip).add_to(exceed_layer)
+                                 tooltip=tip).add_to(layer)
 
-    _add_exceed_runs(result.get("gradient_exceedances", []), "#ff00ff", "gradient", "%")
-    _add_exceed_runs(result.get("radius_exceedances", []), "#00e5ff", "turn radius", " m")
-    exceed_layer.add_to(m)
+    _add_exceed_runs(result.get("gradient_exceedances", []), "#ff00ff",
+                      "OUT OF GRADE — gradient", "%", gradient_exceed_layer)
+    _add_exceed_runs(result.get("radius_exceedances", []), "#00e5ff",
+                      "UNDER GRADE — turn radius", " m", radius_exceed_layer)
+    gradient_exceed_layer.add_to(m)
+    radius_exceed_layer.add_to(m)
+
+    # ---- manual field notes — a point an inspector drops for something
+    # they've spotted on the ground (a root, loose rock, a jump needing
+    # maintenance) that LiDAR can't see at all, separate from the
+    # automatically-detected gradient/radius sections above. Client-side
+    # only for now (not saved server-side) — "Download field notes" exports
+    # them as KML before the tab closes. ----
+    field_notes_layer = folium.FeatureGroup(name="Field notes", show=True, control=False)
+    field_notes_layer.add_to(m)
 
     folium.Marker(location=[pts[0][1], pts[0][0]], tooltip="Start",
                   icon=folium.Icon(color="green", icon="play")).add_to(m)
@@ -919,39 +935,141 @@ def render_folium_map(result):
                   icon=folium.Icon(color="red", icon="stop")).add_to(m)
     folium.LayerControl().add_to(m)
 
-    # Standalone button (not the LayerControl checkbox above) purely for
-    # exceed_layer — one click, no dropdown, since this is the layer DOC
-    # actually needs on every run.
+    # Standalone buttons (not the LayerControl checkbox above) — one per
+    # aspect, so gradient and radius can be shown/hidden independently
+    # instead of one combined on/off, plus an "Add field note" mode for
+    # pointing at something an inspector spots on the ground that none of
+    # the automated layers cover.
     exceed_toggle_js = f"""
     <script>
     document.addEventListener('DOMContentLoaded', function() {{
         var map = {m.get_name()};
-        var exceedLayer = {exceed_layer.get_name()};
-        var ExceedToggle = L.Control.extend({{
+        var gradientLayer = {gradient_exceed_layer.get_name()};
+        var radiusLayer = {radius_exceed_layer.get_name()};
+        var fieldNotesLayer = {field_notes_layer.get_name()};
+        var trailName = {json.dumps(result.get("trail_name", "Trail"))};
+
+        function makeToggleControl(layer, colourOn, labelOn, labelOff) {{
+            return L.Control.extend({{
+                options: {{ position: 'topleft' }},
+                onAdd: function() {{
+                    var btn = L.DomUtil.create('button');
+                    var on = true;
+                    function render() {{
+                        btn.textContent = (on ? 'Hide ' : 'Show ') + labelOn;
+                        btn.style.cssText = 'font: 13px/1 -apple-system,Segoe UI,sans-serif; font-weight: 700;'
+                            + 'padding: 8px 12px; border: 0; border-radius: 4px; cursor: pointer; display: block;'
+                            + 'box-shadow: 0 1px 4px rgba(0,0,0,0.4); margin: 10px 10px 0;'
+                            + (on ? ('background:' + colourOn + '; color:#fff;') : 'background:#888; color:#fff;');
+                    }}
+                    render();
+                    L.DomEvent.on(btn, 'click', function(e) {{
+                        L.DomEvent.stopPropagation(e);
+                        if (on) {{ map.removeLayer(layer); }} else {{ map.addLayer(layer); }}
+                        on = !on;
+                        render();
+                    }});
+                    L.DomEvent.disableClickPropagation(btn);
+                    return btn;
+                }}
+            }});
+        }}
+        map.addControl(new (makeToggleControl(gradientLayer, '#ff00ff', 'gradient out-of-grade'))());
+        map.addControl(new (makeToggleControl(radiusLayer, '#00e5ff', 'turn radius under-grade'))());
+
+        // ---- Field notes: click-to-place pins for anything an inspector
+        // spots on the ground (surface, roots, rocks, a jump needing work)
+        // that none of the automated layers can see. Stays in "add" mode
+        // after each pin so several can be dropped in one pass. Not sent
+        // to the server — Download exports them as KML before the tab closes.
+        var fieldNotes = [];
+        var addingNote = false;
+        var addBtn, countEl;
+
+        function fieldNoteIcon() {{
+            return L.divIcon({{
+                html: '<div style="background:#ffcc00;width:16px;height:16px;border-radius:50%;'
+                    + 'border:2px solid #222;box-shadow:0 1px 3px rgba(0,0,0,0.5)"></div>',
+                className: '', iconSize: [16, 16], iconAnchor: [8, 8]
+            }});
+        }}
+
+        function updateAddBtn() {{
+            addBtn.textContent = addingNote ? 'Click map to drop a pin (on)' : 'Add field note';
+            addBtn.style.background = addingNote ? '#ffcc00' : '#888';
+            addBtn.style.color = addingNote ? '#222' : '#fff';
+        }}
+
+        var AddNoteControl = L.Control.extend({{
+            options: {{ position: 'topleft' }},
+            onAdd: function() {{
+                addBtn = L.DomUtil.create('button');
+                addBtn.style.cssText = 'font: 13px/1 -apple-system,Segoe UI,sans-serif; font-weight: 700;'
+                    + 'padding: 8px 12px; border: 0; border-radius: 4px; cursor: pointer; display: block;'
+                    + 'box-shadow: 0 1px 4px rgba(0,0,0,0.4); margin: 10px 10px 0;';
+                updateAddBtn();
+                L.DomEvent.on(addBtn, 'click', function(e) {{
+                    L.DomEvent.stopPropagation(e);
+                    addingNote = !addingNote;
+                    updateAddBtn();
+                }});
+                L.DomEvent.disableClickPropagation(addBtn);
+                return addBtn;
+            }}
+        }});
+        map.addControl(new AddNoteControl());
+
+        var DownloadNotesControl = L.Control.extend({{
             options: {{ position: 'topleft' }},
             onAdd: function() {{
                 var btn = L.DomUtil.create('button');
-                btn.id = 'exceed-toggle-btn';
-                var on = true;
+                countEl = document.createElement('span');
                 function render() {{
-                    btn.textContent = (on ? 'Hide' : 'Show') + ' out-of-grade sections';
-                    btn.style.cssText = 'font: 13px/1 -apple-system,Segoe UI,sans-serif; font-weight: 700;'
-                        + 'padding: 8px 12px; border: 0; border-radius: 4px; cursor: pointer;'
-                        + 'box-shadow: 0 1px 4px rgba(0,0,0,0.4); margin: 10px;'
-                        + (on ? 'background:#ff00ff; color:#fff;' : 'background:#888; color:#fff;');
+                    btn.textContent = 'Download field notes (' + fieldNotes.length + ')';
                 }}
                 render();
+                btn.style.cssText = 'font: 13px/1 -apple-system,Segoe UI,sans-serif; font-weight: 700;'
+                    + 'padding: 8px 12px; border: 0; border-radius: 4px; cursor: pointer; display: block;'
+                    + 'box-shadow: 0 1px 4px rgba(0,0,0,0.4); margin: 10px 10px 0;'
+                    + 'background:#2a7a2a; color:#fff;';
                 L.DomEvent.on(btn, 'click', function(e) {{
                     L.DomEvent.stopPropagation(e);
-                    if (on) {{ map.removeLayer(exceedLayer); }} else {{ map.addLayer(exceedLayer); }}
-                    on = !on;
-                    render();
+                    if (!fieldNotes.length) {{ return; }}
+                    var placemarks = fieldNotes.map(function(n) {{
+                        return '<Placemark><name>' + n.label.replace(/[<&]/g, '') + '</name>'
+                            + '<Point><coordinates>' + n.lng + ',' + n.lat + ',0</coordinates></Point></Placemark>';
+                    }}).join('');
+                    var kml = '<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2">'
+                        + '<Document><name>' + trailName + ' — field notes</name>' + placemarks + '</Document></kml>';
+                    var blob = new Blob([kml], {{ type: 'application/vnd.google-earth.kml+xml' }});
+                    var a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    a.download = trailName.replace(/[^a-z0-9]+/gi, '_') + '_field_notes.kml';
+                    a.click();
+                    btn._render = render;
                 }});
+                btn._render = render;
                 L.DomEvent.disableClickPropagation(btn);
                 return btn;
             }}
         }});
-        map.addControl(new ExceedToggle());
+        var downloadCtl = new DownloadNotesControl();
+        map.addControl(downloadCtl);
+
+        map.on('click', function(e) {{
+            if (!addingNote) return;
+            var label = window.prompt('What did you see here? (e.g. "loose rock on tread", "root ball", "jump needs maintenance")');
+            if (!label) return;
+            var marker = L.marker(e.latlng, {{ icon: fieldNoteIcon() }})
+                .bindTooltip('FIELD NOTE: ' + label)
+                .addTo(fieldNotesLayer);
+            fieldNotes.push({{ lat: e.latlng.lat, lng: e.latlng.lng, label: label }});
+            if (downloadCtl._container) {{
+                var btn = downloadCtl._container;
+                btn.textContent = 'Download field notes (' + fieldNotes.length + ')';
+            }}
+        }});
+
     }});
     </script>
     """
