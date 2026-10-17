@@ -15,6 +15,20 @@
       <span>LiDAR Trail Audit</span>
       <span>v11 pipeline · live LINZ elevation</span>
       <a href="{{ url_for('index') }}">← Run another trail</a>
+      {% if has_kml %}
+      <a href="{{ url_for('run_kml', run_id=run_id) }}">Download KML</a>
+      {% endif %}
+      {% if current_user.is_authenticated %}
+        {% if is_saved %}
+        <span style="margin-left:auto;color:var(--ink-3)">Saved to your account ✓</span>
+        {% else %}
+        <form method="post" action="{{ url_for('save_run', run_id=run_id) }}" style="margin-left:auto">
+          <button type="submit" class="ghost" style="padding:5px 11px;font-size:12.5px">Save to my account</button>
+        </form>
+        {% endif %}
+      {% else %}
+      <a href="{{ url_for('auth.login', next=request.path) }}" style="margin-left:auto">Sign in to save this run →</a>
+      {% endif %}
     </p>
     <h1>{{ r.trail_name }}</h1>
     <p class="subtitle">

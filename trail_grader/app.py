@@ -1,14 +1,14 @@
-import json, os, threading, traceback, uuid, webbrowser
+import json, os, re, threading, traceback, uuid, webbrowser
 from collections import OrderedDict
 from datetime import datetime
 
-from flask import Flask, abort, jsonify, redirect, render_template, request, url_for
-from flask_login import LoginManager, current_user
+from flask import Flask, Response, abort, jsonify, redirect, render_template, request, url_for
+from flask_login import LoginManager, current_user, login_required
 
 import grader_v11 as gv11
 from extensions import limiter
 from models import SavedRun, User, db
-from runs import MAX_RUNS, RUNS, RUN_KML, run_audit_and_store
+from runs import MAX_RUNS, RUNS, RUN_KML, SAVED_RUN_IDS, run_audit_and_store
 
 try:
     from dotenv import load_dotenv
@@ -233,6 +233,14 @@ def editor():
     return render_template('editor.html')
 
 
+@app.route('/versions')
+def versions():
+    """Bare picker between the live current version and the archived
+    pre-October /legacy build — deliberately unstyled (no audit.css) so
+    it can't be mistaken for favouring either option."""
+    return render_template('versions.html')
+
+
 @app.route('/roadmap/vision')
 def roadmap_vision():
     """R&D status page for the AI trail camera / hazard-detection roadmap
@@ -334,15 +342,49 @@ def audit():
     # in-memory, server-restart-ephemeral cache, so a saved run referencing
     # a dem_id that's since been evicted couldn't be faithfully re-run later.
     if current_user.is_authenticated and dem_source is None:
-        db.session.add(SavedRun(
-            user_id=current_user.id, trail_name=trail_name, kml_bytes=kml_bytes,
-            stated_grade=stated_grade, want_sideslope=want_sideslope,
-            overall_grade=result.get('overall_grade'), avg_gradient=result.get('avg_gradient'),
-            trail_length_m=result.get('trail_length_m'), out_of_grade_pct=result.get('out_of_grade_pct'),
-        ))
-        db.session.commit()
+        _save_run(run_id, current_user, trail_name, kml_bytes, stated_grade, want_sideslope, result)
 
     return redirect(url_for('view_run', run_id=run_id))
+
+
+def _save_run(run_id, user, trail_name, kml_bytes, stated_grade, want_sideslope, result):
+    """Shared by /audit's auto-save (when already signed in) and the result
+    page's explicit "Save to my account" button (for a run that happened
+    before signing in, or a custom-DEM run's text-only fields)."""
+    saved = SavedRun(
+        user_id=user.id, trail_name=trail_name, kml_bytes=kml_bytes,
+        stated_grade=stated_grade, want_sideslope=want_sideslope,
+        overall_grade=result.get('overall_grade'), avg_gradient=result.get('avg_gradient'),
+        trail_length_m=result.get('trail_length_m'), out_of_grade_pct=result.get('out_of_grade_pct'),
+    )
+    db.session.add(saved)
+    db.session.commit()
+    SAVED_RUN_IDS[run_id] = saved.id
+    return saved
+
+
+@app.route('/run/<run_id>/save', methods=['POST'])
+@login_required
+def save_run(run_id):
+    result = RUNS.get(run_id)
+    kml_bytes = RUN_KML.get(run_id)
+    if result is None or kml_bytes is None:
+        abort(404)
+    if run_id not in SAVED_RUN_IDS:
+        _save_run(run_id, current_user, result.get('trail_name', 'Trail'), kml_bytes,
+                  result.get('stated_grade', 4), bool(result.get('sideslopes')), result)
+    return redirect(url_for('view_run', run_id=run_id))
+
+
+@app.route('/run/<run_id>/kml')
+def run_kml(run_id):
+    kml_bytes = RUN_KML.get(run_id)
+    if kml_bytes is None:
+        abort(404)
+    trail_name = (RUNS.get(run_id) or {}).get('trail_name', 'trail')
+    safe_name = re.sub(r'[^A-Za-z0-9_-]+', '_', trail_name).strip('_') or 'trail'
+    return Response(kml_bytes, mimetype='application/vnd.google-earth.kml+xml',
+                     headers={'Content-Disposition': 'attachment; filename="%s.kml"' % safe_name})
 
 
 @app.route('/run/<run_id>')
@@ -353,6 +395,7 @@ def view_run(run_id):
             'That result is no longer held in memory — the server keeps the last '
             '%d runs. Run the audit again.' % MAX_RUNS, 404)
     return render_template('result_v11.html', run_id=run_id, r=result,
+                           is_saved=run_id in SAVED_RUN_IDS, has_kml=run_id in RUN_KML,
                            grade_colours=gv11.GRADE_COLOURS,
                            server_key_available=bool(_anthropic_client))
 

@@ -16,6 +16,13 @@ RUNS = OrderedDict()
 RUN_KML = OrderedDict()
 MAX_RUNS = 12
 
+# run_id -> SavedRun.id, for runs saved to an account — lets the result page
+# show "Saved ✓" instead of a Save button without a DB round trip on
+# every view. UI nicety only, not authoritative: resets on restart same as
+# RUNS/RUN_KML, so worst case after a redeploy the button offers to save
+# again rather than silently refusing to.
+SAVED_RUN_IDS = {}
+
 
 def run_audit_and_store(kml_bytes, trail_name, stated_grade, want_sideslope, dem_source=None):
     """Runs the audit pipeline and caches the result under a new run_id.

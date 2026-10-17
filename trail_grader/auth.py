@@ -6,7 +6,7 @@ targets in this app."""
 import re
 
 import grader_v11 as gv11
-from flask import Blueprint, redirect, render_template, request, url_for
+from flask import Blueprint, Response, redirect, render_template, request, url_for
 from flask_login import current_user, login_required, login_user, logout_user
 
 from extensions import limiter
@@ -96,3 +96,21 @@ def rerun(saved_run_id):
         return render_template('account.html', runs=current_user.runs.all(),
                                grade_colours=gv11.GRADE_COLOURS, error=error), status
     return redirect(url_for('view_run', run_id=run_id))
+
+
+@auth_bp.route('/account/kml/<int:saved_run_id>')
+@login_required
+def saved_kml(saved_run_id):
+    saved = SavedRun.query.filter_by(id=saved_run_id, user_id=current_user.id).first_or_404()
+    safe_name = re.sub(r'[^A-Za-z0-9_-]+', '_', saved.trail_name).strip('_') or 'trail'
+    return Response(saved.kml_bytes, mimetype='application/vnd.google-earth.kml+xml',
+                     headers={'Content-Disposition': 'attachment; filename="%s.kml"' % safe_name})
+
+
+@auth_bp.route('/account/delete/<int:saved_run_id>', methods=['POST'])
+@login_required
+def delete_run(saved_run_id):
+    saved = SavedRun.query.filter_by(id=saved_run_id, user_id=current_user.id).first_or_404()
+    db.session.delete(saved)
+    db.session.commit()
+    return redirect(url_for('auth.account'))
