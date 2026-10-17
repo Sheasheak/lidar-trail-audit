@@ -9,7 +9,8 @@
 <script src="{{ url_for('legacy.static', filename='plotly.min.js') }}"></script>
 </head>
 <body>
-<div style="background:#5a4a00;color:#ffe9a8;font:13px/1.5 -apple-system,Segoe UI,sans-serif;padding:8px 20px;text-align:center;border-bottom:1px solid #8a7200">Archived pre-October 2026 version (commit e2d83c7, 17 Sept 2026) — the exact build submitted for the Prime Minister's Space Prize on 30 Sept 2026. <a href="/" style="color:#fff;text-decoration:underline">Go to the current version &rarr;</a></div>
+<div id="perfNote" style="position:relative;background:#5a4a00;color:#ffe9a8;font:13px/1.5 -apple-system,Segoe UI,sans-serif;padding:8px 36px;text-align:center;border-bottom:1px solid #8a7200">Archived pre-October 2026 version (commit e2d83c7, 17 Sept 2026) — the exact build submitted for the Prime Minister's Space Prize on 30 Sept 2026. <strong>Note:</strong> grading previously ran in under 30 seconds &mdash; hosting has been temporarily moved to a cheaper plan while we optimise memory use, so it may run slower right now. <a href="/current" style="color:#fff;text-decoration:underline">Go to the current version &rarr;</a><button onclick="document.getElementById('perfNote').style.display='none';localStorage.setItem('perfNoteDismissed','1')" aria-label="Dismiss" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:0;color:#ffe9a8;font-size:18px;line-height:1;cursor:pointer;padding:4px 8px">&times;</button></div>
+<script>if(localStorage.getItem('perfNoteDismissed')){var n=document.getElementById('perfNote');if(n)n.style.display='none';}</script>
 <div class="sheet wide">
 
   <header class="titleblock">
