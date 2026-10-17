@@ -87,7 +87,12 @@
 <div class="eyebar">
   <a href="{{ url_for('index') }}" class="title" style="text-decoration:none">TrailSafe</a>
   <span>Trail Line Editor</span>
-  <a href="{{ url_for('grade_form') }}" style="margin-left:auto">Skip to manual grading form →</a>
+  <a href="{{ url_for('grade_form') }}">Skip to manual grading form →</a>
+  {% if current_user.is_authenticated %}
+  <a href="{{ url_for('auth.account') }}" style="margin-left:auto">My account →</a>
+  {% else %}
+  <a href="{{ url_for('auth.login') }}" style="margin-left:auto">Sign in →</a>
+  {% endif %}
 </div>
 
 <div class="editor-body">

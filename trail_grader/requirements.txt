@@ -3,6 +3,9 @@
 # smaller set the deployed app.py actually imports.)
 Flask
 flask-limiter
+flask-login
+flask-sqlalchemy
+psycopg2-binary
 gunicorn
 python-dotenv
 anthropic

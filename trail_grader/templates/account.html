@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+<title>My account — TrailSafe</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='audit.css') }}">
+</head>
+<body>
+<div class="sheet wide">
+
+  <header class="titleblock">
+    <p class="eyebrow">
+      <span>TrailSafe</span><span>My account</span>
+      <a href="{{ url_for('index') }}" style="margin-left:auto">← Home</a>
+    </p>
+    <h1>{{ current_user.email }}</h1>
+    <p class="subtitle">Every trail you've graded while signed in, newest first.</p>
+    <form method="post" action="{{ url_for('auth.logout') }}" style="margin-top:4px">
+      <button type="submit" class="ghost">Sign out</button>
+    </form>
+  </header>
+
+  {% if error %}
+  <div class="errorbox" role="alert"><b>That run didn't finish</b>{{ error }}</div>
+  {% endif %}
+
+  <section style="margin-top:28px">
+    {% if runs %}
+    <table class="flags">
+      <thead>
+        <tr>
+          <th scope="col">Trail</th>
+          <th scope="col">Run</th>
+          <th scope="col">Grade</th>
+          <th scope="col">Length</th>
+          <th scope="col">Out of grade</th>
+          <th scope="col"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for run in runs %}
+        <tr>
+          <td>{{ run.trail_name }}</td>
+          <td class="mono">{{ run.run_at.strftime('%d %b %Y, %H:%M') }}</td>
+          <td>
+            {% if run.overall_grade %}
+            <span class="pill" style="background:var(--g{{ run.overall_grade }});color:var(--grade-ink)">
+              Grade {{ run.overall_grade }} — {{ grade_colours[run.overall_grade] }}
+            </span>
+            {% else %}—{% endif %}
+          </td>
+          <td>{{ (run.trail_length_m or 0)|round|int }} m</td>
+          <td>{{ run.out_of_grade_pct if run.out_of_grade_pct is not none else '—' }}{% if run.out_of_grade_pct is not none %}%{% endif %}</td>
+          <td>
+            <form method="post" action="{{ url_for('auth.rerun', saved_run_id=run.id) }}">
+              <button type="submit" class="ghost">View →</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="card-sub">No saved runs yet — <a href="{{ url_for('editor') }}">grade a trail</a> while signed in and it'll show up here.</p>
+    {% endif %}
+  </section>
+
+</div>
+</body>
+</html>

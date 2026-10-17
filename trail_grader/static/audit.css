@@ -16,7 +16,7 @@
   /* grade ramp — the real NZ MTB trail-marker colours (grader.py GRADES),
      not an accent ramp: green 1/2, blue 3/4, black 5, double-black 6 */
   --g1: #00b300; --g2: #66cc00; --g3: #00aaff;
-  --g4: #0044cc; --g5: #444444; --g6: #660000;
+  --g4: #0044cc; --g5: #000000; --g6: #e60000;
   --grade-ink: #f9faf7;
 
   --font-display: system-ui, -apple-system, "Segoe UI", sans-serif;

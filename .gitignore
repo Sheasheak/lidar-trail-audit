@@ -2,6 +2,9 @@
 .env
 *.key
 
+# Local dev database (production uses Postgres via DATABASE_URL)
+*.db
+
 # Python
 __pycache__/
 *.py[cod]

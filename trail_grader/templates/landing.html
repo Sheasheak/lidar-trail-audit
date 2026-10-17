@@ -123,6 +123,11 @@
       <p class="eyebrow">
         <span class="title" style="color:var(--ink);font-weight:600">TrailSafe</span>
         <span>LiDAR trail audit</span>
+        {% if current_user.is_authenticated %}
+        <a href="{{ url_for('auth.account') }}" style="margin-left:auto">My account →</a>
+        {% else %}
+        <a href="{{ url_for('auth.login') }}" style="margin-left:auto">Sign in →</a>
+        {% endif %}
       </p>
       <h1>Grade a trail from <span class="grad-text">the terrain</span>, not a stopwatch.</h1>
       <p class="lede">

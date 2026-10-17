@@ -3,10 +3,12 @@ from collections import OrderedDict
 from datetime import datetime
 
 from flask import Flask, abort, jsonify, redirect, render_template, request, url_for
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
+from flask_login import LoginManager, current_user
 
 import grader_v11 as gv11
+from extensions import limiter
+from models import SavedRun, User, db
+from runs import MAX_RUNS, RUNS, RUN_KML, run_audit_and_store
 
 try:
     from dotenv import load_dotenv
@@ -22,15 +24,39 @@ app = Flask(__name__)
 # "grade any trail" option needs more headroom than the original 10MB cap.
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
 
-# Public deployment: /audit makes thousands of LINZ calls and /summary spends
-# Anthropic tokens, so both need tighter per-IP caps than the default.
-limiter = Limiter(get_remote_address, app=app, default_limits=["200 per day", "50 per hour"])
-
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SAMPLE_KML = os.path.join(REPO_ROOT, 'data', 'askins.kml')
 
 if load_dotenv:
     load_dotenv(os.path.join(REPO_ROOT, '.env'))
+
+# SECRET_KEY signs the session cookie — a dev fallback is fine locally, but
+# without a real one set on Render every redeploy invalidates all sessions
+# (everyone gets logged out). DATABASE_URL: Render's Postgres add-on hands
+# out "postgres://...", which SQLAlchemy 1.4+ rejects — it wants
+# "postgresql://" — hence the scheme swap. No DATABASE_URL (local dev) falls
+# back to a SQLite file next to the app.
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-only-insecure-key-set-SECRET_KEY-in-prod')
+db_url = os.environ.get('DATABASE_URL', 'sqlite:///' + os.path.join(REPO_ROOT, 'trailsafe.db'))
+if db_url.startswith('postgres://'):
+    db_url = db_url.replace('postgres://', 'postgresql://', 1)
+app.config['SQLALCHEMY_DATABASE_URI'] = db_url
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+limiter.init_app(app)
+db.init_app(app)
+with app.app_context():
+    db.create_all()
+
+login_manager = LoginManager()
+login_manager.login_view = 'auth.login'
+login_manager.init_app(app)
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    return db.session.get(User, int(user_id))
+
 
 # Imported after load_dotenv(), not before: the legacy blueprint reads
 # ANTHROPIC_API_KEY at import time for its own AI-summary client, same as
@@ -39,6 +65,9 @@ if load_dotenv:
 # app's own LINZ_API_KEY.
 from legacy import legacy_bp
 app.register_blueprint(legacy_bp, url_prefix='/legacy')
+
+from auth import auth_bp
+app.register_blueprint(auth_bp)
 
 SUMMARY_MODEL = "claude-opus-5"
 _anthropic_client = anthropic.Anthropic() if (anthropic and os.environ.get('ANTHROPIC_API_KEY')) else None
@@ -165,11 +194,6 @@ DATA:
         traceback.print_exc()
         return None
 
-
-# Finished runs, newest last. Bounded so a long session can't eat memory.
-RUNS = OrderedDict()
-RUN_KML = OrderedDict()
-MAX_RUNS = 12
 
 # User-uploaded DEMs for the editor's "grade any trail" option, keyed by
 # dem_id. Values are the (array, transform, nodata) tuple from
@@ -298,26 +322,26 @@ def audit():
     dem_id = request.form.get('dem_id') or None
     dem_source = CUSTOM_DEMS.get(dem_id)
 
-    try:
-        result = gv11.run_audit(kml_bytes, trail_name=trail_name, stated_grade=stated_grade,
-                                want_sideslope=want_sideslope, dem_source=dem_source)
-    except ValueError as e:
-        return _render_input(str(e), 400)
-    except Exception as e:
-        traceback.print_exc()
-        return _render_input('Processing failed: %s' % e, 500)
+    run_id, error, status = run_audit_and_store(kml_bytes, trail_name, stated_grade, want_sideslope, dem_source)
+    if run_id is None:
+        return _render_input(error, status)
 
-    result['run_at'] = datetime.now().strftime('%d %b %Y, %H:%M')
+    result = RUNS[run_id]
     if dem_source is not None:
         result['_dem_id'] = dem_id
 
-    run_id = uuid.uuid4().hex[:10]
-    RUNS[run_id] = result
-    while len(RUNS) > MAX_RUNS:
-        RUNS.popitem(last=False)
-    RUN_KML[run_id] = kml_bytes
-    while len(RUN_KML) > MAX_RUNS:
-        RUN_KML.popitem(last=False)
+    # Custom-DEM runs aren't saved to history: CUSTOM_DEMS is itself an
+    # in-memory, server-restart-ephemeral cache, so a saved run referencing
+    # a dem_id that's since been evicted couldn't be faithfully re-run later.
+    if current_user.is_authenticated and dem_source is None:
+        db.session.add(SavedRun(
+            user_id=current_user.id, trail_name=trail_name, kml_bytes=kml_bytes,
+            stated_grade=stated_grade, want_sideslope=want_sideslope,
+            overall_grade=result.get('overall_grade'), avg_gradient=result.get('avg_gradient'),
+            trail_length_m=result.get('trail_length_m'), out_of_grade_pct=result.get('out_of_grade_pct'),
+        ))
+        db.session.commit()
+
     return redirect(url_for('view_run', run_id=run_id))
 
 

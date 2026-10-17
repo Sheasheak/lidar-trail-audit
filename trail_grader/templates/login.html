@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+<title>Sign in — TrailSafe</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='audit.css') }}">
+</head>
+<body>
+<div class="sheet" style="max-width:480px">
+
+  <header class="titleblock">
+    <p class="eyebrow"><span>TrailSafe</span><span>Sign in</span><a href="{{ url_for('index') }}" style="margin-left:auto">← Home</a></p>
+    <h1>Sign in</h1>
+  </header>
+
+  {% if error %}
+  <div class="errorbox" role="alert"><b>Couldn't sign you in</b>{{ error }}</div>
+  {% endif %}
+
+  <form method="post" action="{{ url_for('auth.login') }}" style="margin-top:24px">
+    <input type="hidden" name="next" value="{{ next or '' }}">
+    <div class="formgrid">
+      <div class="fieldrow">
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" value="{{ email or '' }}" required autofocus>
+      </div>
+      <div class="fieldrow">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" required>
+      </div>
+      <button type="submit" class="primary">Sign in</button>
+    </div>
+  </form>
+
+  <p class="hint" style="margin-top:18px">
+    No account yet? <a href="{{ url_for('auth.signup') }}">Create one</a>
+  </p>
+
+</div>
+</body>
+</html>
