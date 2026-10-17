@@ -104,12 +104,21 @@ def _accessible_run_or_404(saved_run_id):
     abort(404)
 
 
-@auth_bp.route('/account')
-@login_required
-def account():
+UNKNOWN_REGION = 'Region unknown'
+
+
+def _account_context(**extra):
+    """Shared by the main /account view and rerun()'s error path, which
+    re-renders the same page rather than redirecting — keeps the
+    region-grouping logic in one place."""
     runs = _visible_runs()
     runs_geo = []
+    regions = {}
     for r in runs:
+        region = (gv11.classify_region(r.centroid_lat, r.centroid_lon)
+                  if r.centroid_lat is not None and r.centroid_lon is not None else UNKNOWN_REGION)
+        regions.setdefault(region, []).append(r)
+
         if r.centroid_lat is None or r.centroid_lon is None:
             continue
         try:
@@ -122,7 +131,26 @@ def account():
             'overall_grade': r.overall_grade, 'length_m': r.trail_length_m, 'line': line,
             'saved_by': r.user.email if current_user.organization_id else None,
         })
-    return render_template('account.html', runs=runs, runs_geo=runs_geo, grade_colours=gv11.GRADE_COLOURS)
+
+    # Most-populated region first — a user's saved trails are usually
+    # concentrated in one or two areas, so that's what they want to see
+    # without scrolling. "Region unknown" (old runs saved before centroids
+    # were tracked, or a KML that failed to parse) goes last regardless of
+    # count, rather than competing for a "top region" slot.
+    grouped_runs = sorted(
+        ((name, group) for name, group in regions.items() if name != UNKNOWN_REGION),
+        key=lambda item: len(item[1]), reverse=True)
+    if UNKNOWN_REGION in regions:
+        grouped_runs.append((UNKNOWN_REGION, regions[UNKNOWN_REGION]))
+
+    return dict(runs=runs, runs_geo=runs_geo, grouped_runs=grouped_runs,
+               grade_colours=gv11.GRADE_COLOURS, **extra)
+
+
+@auth_bp.route('/account')
+@login_required
+def account():
+    return render_template('account.html', **_account_context())
 
 
 @auth_bp.route('/account/rename/<int:saved_run_id>', methods=['POST'])
@@ -146,8 +174,7 @@ def rerun(saved_run_id):
     run_id, error, status = run_audit_and_store(
         saved.kml_bytes, saved.trail_name, saved.stated_grade, saved.want_sideslope)
     if run_id is None:
-        return render_template('account.html', runs=_visible_runs(),
-                               grade_colours=gv11.GRADE_COLOURS, error=error), status
+        return render_template('account.html', **_account_context(error=error)), status
     return redirect(url_for('view_run', run_id=run_id))
 
 

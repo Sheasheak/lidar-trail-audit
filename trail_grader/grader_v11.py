@@ -422,6 +422,43 @@ def nearest_chainage(points_wgs84_dense, lat, lon):
     return best_i
 
 
+# Approximate centre of each of NZ's 16 regional council areas (lat, lon) —
+# nearest-centre classification, not actual council boundary polygons. A
+# trail right on a regional border could land on the "wrong" side; that's
+# an acceptable trade for not having to bundle/maintain real boundary
+# geometry just to group a saved-trails list.
+NZ_REGIONS = [
+    ("Northland", -35.73, 174.32),
+    ("Auckland", -36.85, 174.76),
+    ("Waikato", -37.78, 175.28),
+    ("Bay of Plenty", -37.69, 176.17),
+    ("Gisborne", -38.66, 178.02),
+    ("Hawke's Bay", -39.49, 176.91),
+    ("Taranaki", -39.07, 174.08),
+    ("Manawatū-Whanganui", -39.93, 175.61),
+    ("Wellington", -41.14, 175.12),
+    ("Tasman", -41.33, 172.83),
+    ("Nelson", -41.27, 173.28),
+    ("Marlborough", -41.51, 173.95),
+    ("West Coast", -42.45, 171.21),
+    ("Canterbury", -43.53, 172.64),
+    ("Otago", -45.03, 169.14),
+    ("Southland", -46.05, 167.95),
+]
+
+
+def classify_region(lat, lon):
+    """Nearest NZ_REGIONS centre to (lat, lon), by plain lat/lon distance —
+    fine at this scale (no haversine needed to tell Canterbury from
+    Otago)."""
+    best_name, best_d2 = None, float("inf")
+    for name, rlat, rlon in NZ_REGIONS:
+        d2 = (rlat - lat) ** 2 + (rlon - lon) ** 2
+        if d2 < best_d2:
+            best_name, best_d2 = name, d2
+    return best_name
+
+
 def extract_video_frames(video_bytes, filename_hint="clip.mp4", max_frames=6):
     """Evenly-spaced JPEG frames from an uploaded video, via imageio's
     bundled ffmpeg (imageio-ffmpeg ships its own static binary — works the
