@@ -32,6 +32,14 @@ SAMPLE_KML = os.path.join(REPO_ROOT, 'data', 'askins.kml')
 if load_dotenv:
     load_dotenv(os.path.join(REPO_ROOT, '.env'))
 
+# Imported after load_dotenv(), not before: the legacy blueprint reads
+# ANTHROPIC_API_KEY at import time for its own AI-summary client, same as
+# this file does below — importing it earlier would silently leave that
+# client unset, the exact bug already hit once this session with the main
+# app's own LINZ_API_KEY.
+from legacy import legacy_bp
+app.register_blueprint(legacy_bp, url_prefix='/legacy')
+
 SUMMARY_MODEL = "claude-opus-5"
 _anthropic_client = anthropic.Anthropic() if (anthropic and os.environ.get('ANTHROPIC_API_KEY')) else None
 
