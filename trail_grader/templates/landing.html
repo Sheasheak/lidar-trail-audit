@@ -12,9 +12,10 @@
 
   .hero {
     position: relative;
-    padding: 84px 0 64px;
-    border-bottom: 1px solid var(--rule);
+    padding: 56px 0 50px;
+    border-radius: 14px;
     overflow: hidden;
+    margin-bottom: 8px;
     /* Real trail photo instead of the old abstract contour pattern — dark
        gradient on the text side so white text stays readable, fading out
        toward the right so the rider/jump stays visible. */
@@ -206,7 +207,7 @@
   </section>
 
   <section>
-    <div style="position:relative;border-radius:10px;overflow:hidden;height:280px;background:url('{{ url_for('static', filename='photos/forest-trail.jpg') }}') center 35%/cover no-repeat">
+    <div style="position:relative;border-radius:14px;overflow:hidden;height:280px;background:url('{{ url_for('static', filename='photos/forest-trail.jpg') }}') center 35%/cover no-repeat">
       <div style="position:absolute;inset:0;background:linear-gradient(0deg, rgba(8,12,8,0.78) 0%, rgba(8,12,8,0.15) 55%, rgba(8,12,8,0) 100%);display:flex;align-items:flex-end;padding:20px 24px">
         <p style="color:#fff;font-size:14px;margin:0;max-width:60ch">
           Built from footage and terrain just like this — benched singletrack under tree canopy,
