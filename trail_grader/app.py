@@ -222,10 +222,10 @@ def _rate_limited(e):
 
 @app.route('/')
 def index():
-    """Landing page — what the tool is and what's coming next, with a clear
-    way into the actual editor rather than dropping a first-time visitor
-    straight into it."""
-    return render_template('landing.html')
+    """Bare picker between the live current version and the archived
+    pre-October /legacy build — the main page, deliberately unstyled (no
+    audit.css) so it can't be mistaken for favouring either option."""
+    return render_template('versions.html')
 
 
 @app.route('/editor')
