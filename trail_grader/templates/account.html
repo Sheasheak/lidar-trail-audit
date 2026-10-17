@@ -102,27 +102,34 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '&copy; OpenStreetMap contributors', maxZoom: 19,
 }).addTo(map);
 
-const markers = RUNS_GEO.map(r => {
+const shapes = [];
+RUNS_GEO.forEach(r => {
   const colour = GRADE_COLOURS[r.overall_grade] || '#1c5cab';
-  const marker = L.circleMarker([r.lat, r.lon], {
-    radius: 8, color: '#fff', weight: 2, fillColor: colour, fillOpacity: 0.95,
-  }).addTo(map);
   const gradeText = r.overall_grade ? ('Grade ' + r.overall_grade) : 'Ungraded';
   const lengthText = r.length_m ? Math.round(r.length_m) + ' m' : '';
-  marker.bindPopup(
+  const popupHtml =
     '<b>' + r.trail_name.replace(/</g, '&lt;') + '</b><br>' +
     gradeText + (lengthText ? ' · ' + lengthText : '') + '<br>' +
     '<form method="post" action="/account/rerun/' + r.id + '" style="margin-top:6px">' +
-    '<button type="submit">View →</button></form>'
-  );
-  return marker;
+    '<button type="submit">View →</button></form>';
+
+  // Full trail line when we have one (parsed from the saved KML); the
+  // centroid pin is the fallback/click target either way, and stays
+  // visible even for a very short or zoomed-out line.
+  if (r.line && r.line.length > 1) {
+    const line = L.polyline(r.line, { color: colour, weight: 4, opacity: 0.9 })
+      .addTo(map).bindPopup(popupHtml);
+    shapes.push(line);
+  }
+  const marker = L.circleMarker([r.lat, r.lon], {
+    radius: 7, color: '#fff', weight: 2, fillColor: colour, fillOpacity: 0.95,
+  }).addTo(map).bindPopup(popupHtml);
+  shapes.push(marker);
 });
 
-if (markers.length === 1) {
-  map.setView(markers[0].getLatLng(), 13);
-} else {
-  map.fitBounds(L.featureGroup(markers).getBounds().pad(0.2));
-}
+// pad() plus an explicit maxZoom also covers the single-pin, no-line case
+// (a degenerate zero-area bounds) without needing to special-case it.
+map.fitBounds(L.featureGroup(shapes).getBounds().pad(0.2), { maxZoom: 14 });
 </script>
 {% endif %}
 </body>

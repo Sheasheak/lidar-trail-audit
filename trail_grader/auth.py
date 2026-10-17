@@ -80,10 +80,19 @@ def logout():
 @login_required
 def account():
     runs = current_user.runs.all()
-    runs_geo = [{
-        'id': r.id, 'trail_name': r.trail_name, 'lat': r.centroid_lat, 'lon': r.centroid_lon,
-        'overall_grade': r.overall_grade, 'length_m': r.trail_length_m,
-    } for r in runs if r.centroid_lat is not None and r.centroid_lon is not None]
+    runs_geo = []
+    for r in runs:
+        if r.centroid_lat is None or r.centroid_lon is None:
+            continue
+        try:
+            # [lat, lon] for Leaflet — parse_kml returns (lon, lat) pairs.
+            line = [[lat, lon] for lon, lat in gv11.parse_kml(r.kml_bytes)]
+        except Exception:
+            line = []
+        runs_geo.append({
+            'id': r.id, 'trail_name': r.trail_name, 'lat': r.centroid_lat, 'lon': r.centroid_lon,
+            'overall_grade': r.overall_grade, 'length_m': r.trail_length_m, 'line': line,
+        })
     return render_template('account.html', runs=runs, runs_geo=runs_geo, grade_colours=gv11.GRADE_COLOURS)
 
 
