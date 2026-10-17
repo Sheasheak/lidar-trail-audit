@@ -241,6 +241,15 @@ def editor():
     return render_template('editor.html')
 
 
+@app.route('/batch')
+def batch():
+    """Pick several KML files at once; each gets its own "Edit" button into
+    the trail editor. Entirely client-side hand-off (sessionStorage, see
+    editor.html) — nothing is uploaded here, so no server-side storage or
+    cleanup to manage for files that are never opened."""
+    return render_template('batch.html')
+
+
 @app.route('/versions')
 def versions():
     """Bare picker between the live current version and the archived

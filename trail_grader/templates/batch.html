@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+<title>Upload multiple trails — TrailSafe</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='audit.css') }}">
+</head>
+<body>
+<div class="sheet">
+
+  <header class="titleblock">
+    <p class="eyebrow"><span>TrailSafe</span><span>Upload multiple trails</span><a href="{{ url_for('editor') }}" style="margin-left:auto">← Trail editor</a></p>
+    <h1>Upload multiple trails</h1>
+    <p class="subtitle">
+      Pick several KML files at once. Each one gets its own "Edit" button —
+      click it to open that trail in the map editor and correct it against
+      aerial imagery before grading, same as loading one KML at a time.
+      Nothing is uploaded to the server until you open a file to edit it.
+    </p>
+  </header>
+
+  <div class="card" style="margin-top:20px">
+    <h3>Choose KML files</h3>
+    <p class="card-sub">Trailforks/GPS exports — select as many as you like.</p>
+    <input type="file" id="kmlFiles" multiple accept=".kml">
+  </div>
+
+  <div id="fileList" style="margin-top:16px;display:flex;flex-direction:column;gap:10px"></div>
+
+</div>
+<script>
+document.getElementById("kmlFiles").onchange = ev => {
+  const files = Array.from(ev.target.files);
+  const list = document.getElementById("fileList");
+  list.innerHTML = "";
+  files.forEach(file => {
+    const row = document.createElement("div");
+    row.className = "card";
+    row.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:16px";
+
+    const label = document.createElement("span");
+    label.textContent = file.name;
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "primary";
+    btn.textContent = "Edit →";
+    btn.onclick = () => {
+      const r = new FileReader();
+      r.onload = () => {
+        sessionStorage.setItem("pendingKmlText", r.result);
+        sessionStorage.setItem("pendingKmlName", file.name.replace(/\.kml$/i, ""));
+        window.location = "{{ url_for('editor') }}";
+      };
+      r.readAsText(file);
+    };
+
+    row.appendChild(label);
+    row.appendChild(btn);
+    list.appendChild(row);
+  });
+};
+</script>
+</body>
+</html>

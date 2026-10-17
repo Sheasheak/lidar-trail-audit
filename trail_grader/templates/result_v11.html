@@ -14,7 +14,7 @@
     <p class="eyebrow">
       <span>LiDAR Trail Audit</span>
       <span>v11 pipeline · live LINZ elevation</span>
-      <a href="{{ url_for('index') }}">← Run another trail</a>
+      <a href="{{ url_for('current') }}">← Run another trail</a>
       {% if has_kml %}
       <a href="{{ url_for('run_kml', run_id=run_id) }}">Download KML</a>
       {% endif %}

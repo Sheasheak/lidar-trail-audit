@@ -85,7 +85,7 @@
 <body>
 
 <div class="eyebar">
-  <a href="{{ url_for('index') }}" class="title" style="text-decoration:none">TrailSafe</a>
+  <a href="{{ url_for('current') }}" class="title" style="text-decoration:none">TrailSafe</a>
   <span>Trail Line Editor</span>
   <a href="{{ url_for('grade_form') }}">Skip to manual grading form →</a>
   {% if current_user.is_authenticated %}
@@ -121,7 +121,8 @@
     <div class="stat">Length: <b id="length">–</b></div>
     <button id="reset" class="sec">Reset to original line</button>
     <label class="row" style="margin-top:8px">Load a KML: <input id="kmlFile" type="file" accept=".kml"></label>
-    <div class="hint">Load any Trailforks/GPS KML to edit a different trail — hillshade/slope regenerate live from LINZ for wherever it is (coarse grid, can take up to a minute).</div>
+    <div class="hint">Load any Trailforks/GPS KML to edit a different trail — hillshade/slope regenerate live from LINZ for wherever it is (coarse grid, can take up to a minute).
+      Got several trails to correct? <a href="{{ url_for('batch') }}">Upload them all at once →</a></div>
   </div>
 
   <details class="grp">
@@ -143,6 +144,11 @@
 
   <div class="grp">
     <h2>Finish</h2>
+    <label class="row" style="display:block;margin-bottom:10px">
+      Trail name
+      <input type="text" id="trailName" placeholder="e.g. Askins" value="Corrected trail"
+             style="width:100%;padding:6px;margin-top:4px;font-size:13px;border:1px solid var(--rule);border-radius:4px;background:var(--surface-2);color:var(--ink);box-sizing:border-box">
+    </label>
     <label class="row" style="display:block;margin-bottom:10px">
       Signposted grade
       <select id="statedGrade" style="width:100%;padding:6px;margin-top:4px;font-size:13px;border:1px solid var(--rule);border-radius:4px;background:var(--surface-2);color:var(--ink)">
@@ -275,21 +281,38 @@ async function refreshTerrainOverlays(latlngs) {
   }
 }
 
+function loadKmlText(text, name) {
+  const m = text.match(/<coordinates>([\s\S]*?)<\/coordinates>/);
+  if (!m) { alert("No <coordinates> found in that KML."); return false; }
+  const latlngs = m[1].trim().split(/\s+/).map(c => {
+    const p = c.split(","); return [parseFloat(p[1]), parseFloat(p[0])];
+  });
+  loadTrail(latlngs, true);
+  refreshTerrainOverlays(latlngs);
+  if (name) document.getElementById("trailName").value = name;
+  return true;
+}
+
 document.getElementById("kmlFile").onchange = ev => {
   const file = ev.target.files[0];
   if (!file) return;
   const r = new FileReader();
-  r.onload = () => {
-    const m = r.result.match(/<coordinates>([\s\S]*?)<\/coordinates>/);
-    if (!m) { alert("No <coordinates> found in that KML."); return; }
-    const latlngs = m[1].trim().split(/\s+/).map(c => {
-      const p = c.split(","); return [parseFloat(p[1]), parseFloat(p[0])];
-    });
-    loadTrail(latlngs, true);
-    refreshTerrainOverlays(latlngs);
-  };
+  r.onload = () => loadKmlText(r.result, file.name.replace(/\.kml$/i, ""));
   r.readAsText(file);
 };
+
+// Auto-load a KML staged from the multi-file picker at /batch — File
+// objects can't survive a normal page navigation, so that page hands the
+// chosen file's text across via sessionStorage instead of a server round
+// trip, reusing the exact same client-side parsing as a manual upload above.
+(() => {
+  const text = sessionStorage.getItem("pendingKmlText");
+  if (!text) return;
+  sessionStorage.removeItem("pendingKmlText");
+  const name = sessionStorage.getItem("pendingKmlName") || "";
+  sessionStorage.removeItem("pendingKmlName");
+  loadKmlText(text, name);
+})();
 
 const demStatus = document.getElementById("demStatus");
 document.getElementById("demFile").onchange = async ev => {
@@ -354,7 +377,8 @@ document.getElementById("doneBtn").onclick = () => {
   form.appendChild(fileInput);
 
   const statedGrade = document.getElementById("statedGrade").value;
-  const fields = { source: "upload", trail_name: "Corrected trail", stated_grade: statedGrade, want_sideslope: "1" };
+  const trailName = document.getElementById("trailName").value.trim() || "Corrected trail";
+  const fields = { source: "upload", trail_name: trailName, stated_grade: statedGrade, want_sideslope: "1" };
   if (customDemId) fields.dem_id = customDemId;
   for (const [name, value] of Object.entries(fields)) {
     const input = document.createElement("input");

@@ -73,7 +73,7 @@ def login():
 @login_required
 def logout():
     logout_user()
-    return redirect(url_for('index'))
+    return redirect(url_for('current'))
 
 
 @auth_bp.route('/account')
@@ -81,6 +81,17 @@ def logout():
 def account():
     runs = current_user.runs.all()
     return render_template('account.html', runs=runs, grade_colours=gv11.GRADE_COLOURS)
+
+
+@auth_bp.route('/account/rename/<int:saved_run_id>', methods=['POST'])
+@login_required
+def rename_run(saved_run_id):
+    saved = SavedRun.query.filter_by(id=saved_run_id, user_id=current_user.id).first_or_404()
+    name = (request.form.get('trail_name') or '').strip()
+    if name:
+        saved.trail_name = name[:255]
+        db.session.commit()
+    return redirect(url_for('auth.account'))
 
 
 @auth_bp.route('/account/rerun/<int:saved_run_id>', methods=['POST'])

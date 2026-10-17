@@ -13,7 +13,7 @@
   <header class="titleblock">
     <p class="eyebrow">
       <span>TrailSafe</span><span>My account</span>
-      <a href="{{ url_for('index') }}" style="margin-left:auto">← Home</a>
+      <a href="{{ url_for('current') }}" style="margin-left:auto">← Home</a>
     </p>
     <h1>{{ current_user.email }}</h1>
     <p class="subtitle">Every trail you've graded while signed in, newest first.</p>
@@ -42,7 +42,14 @@
       <tbody>
         {% for run in runs %}
         <tr>
-          <td>{{ run.trail_name }}</td>
+          <td>
+            <form method="post" action="{{ url_for('auth.rename_run', saved_run_id=run.id) }}"
+                  style="display:flex;gap:6px;align-items:center">
+              <input type="text" name="trail_name" value="{{ run.trail_name }}" required
+                     style="width:140px;padding:5px 7px;font-size:13px">
+              <button type="submit" class="ghost" style="padding:5px 9px;font-size:12px">Rename</button>
+            </form>
+          </td>
           <td class="mono">{{ run.run_at.strftime('%d %b %Y, %H:%M') }}</td>
           <td>
             {% if run.overall_grade %}
