@@ -188,6 +188,40 @@
     <div id="ai-recommendation-text" style="white-space:pre-wrap;font-size:14px;line-height:1.6"></div>
   </section>
 
+  <!-- ================= AI TRAIL CAMERA (prototype) ================= -->
+  <section class="card" id="vision-card" style="margin-top:24px">
+    <h3>AI trail camera <span class="roadmap-badge" style="display:inline-block;font-family:var(--font-mono);font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-3);border:1px solid var(--rule);border-radius:4px;padding:2px 7px;vertical-align:middle;margin-left:6px">Prototype</span></h3>
+    <p class="card-sub">
+      LiDAR can't see roots, loose rock, jump lips or surface condition. Upload geotagged photos from the
+      trail (phone photos with location on) and each one gets matched to its nearest chainage and checked
+      by Claude for hazards worth flagging. This is the realistic near-term path from the
+      <a href="{{ url_for('roadmap_vision') }}">AI trail camera roadmap</a> — sampling individual photos
+      through an existing model, not the custom-trained production pipeline documented there. Photos
+      without GPS data still get analysed, just without a chainage position.
+    </p>
+    <div class="formgrid" style="margin-top:14px">
+      <div class="fieldrow">
+        <label for="vision-photos">Photos (JPEG/PNG, up to {{ 6 }} at a time)</label>
+        <input type="file" id="vision-photos" accept="image/jpeg,image/png" multiple>
+      </div>
+      <button type="button" class="ghost" id="vision-btn" style="width:fit-content">Analyse photos</button>
+      <p class="hint mono" id="vision-status" style="color:var(--ink-3);font-size:11px"></p>
+    </div>
+    <table class="flags" id="vision-table" style="margin-top:16px;{{ '' if r.vision_findings else 'display:none' }}">
+      <thead><tr><th scope="col">Photo</th><th scope="col">Chainage</th><th scope="col">Finding</th><th scope="col">Severity</th></tr></thead>
+      <tbody id="vision-tbody">
+        {% for f in r.vision_findings or [] %}
+        <tr>
+          <td>{{ f.filename }}</td>
+          <td>{% if f.chainage_m is not none %}{{ f.chainage_m }} m{% else %}—{% endif %}</td>
+          <td>{% if f.error %}<span class="cause">{{ f.error }}</span>{% elif f.hazard_found %}{{ f.summary }}{% else %}No hazard noted{% endif %}</td>
+          <td>{{ f.severity or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
   <!-- ================= 3D ================= -->
   <section>
     <div class="sec-head">
@@ -381,6 +415,47 @@ document.getElementById('ai-summary-btn').addEventListener('click', async () => 
       rec.textContent = data.recommendation;
       recCard.style.display = '';
     }
+  } catch (e) {
+    status.textContent = 'Request failed: ' + e;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.getElementById('vision-btn').addEventListener('click', async () => {
+  const btn = document.getElementById('vision-btn');
+  const status = document.getElementById('vision-status');
+  const fileInput = document.getElementById('vision-photos');
+  const table = document.getElementById('vision-table');
+  const tbody = document.getElementById('vision-tbody');
+  const files = fileInput.files;
+  if (!files.length) { status.textContent = 'Choose at least one photo.'; return; }
+
+  const fd = new FormData();
+  for (const f of files) fd.append('photos', f);
+  const apiKey = apiKeyInput.value.trim();
+  if (apiKey) fd.append('api_key', apiKey);
+
+  btn.disabled = true;
+  status.textContent = `Analysing ${files.length} photo${files.length === 1 ? '' : 's'}…`;
+  try {
+    const resp = await fetch("{{ url_for('run_vision', run_id=run_id) }}", { method: 'POST', body: fd });
+    const data = await resp.json();
+    if (!resp.ok) {
+      status.textContent = data.error || 'Analysis failed.';
+      return;
+    }
+    status.textContent = '';
+    for (const f of data.findings) {
+      const tr = document.createElement('tr');
+      const chainage = f.chainage_m != null ? f.chainage_m + ' m' : '—';
+      const finding = f.error ? `<span class="cause">${f.error}</span>`
+        : (f.hazard_found ? f.summary : 'No hazard noted');
+      tr.innerHTML = `<td>${f.filename}</td><td>${chainage}</td><td>${finding}</td><td>${f.severity || '—'}</td>`;
+      tbody.appendChild(tr);
+    }
+    table.style.display = '';
+    fileInput.value = '';
   } catch (e) {
     status.textContent = 'Request failed: ' + e;
   } finally {

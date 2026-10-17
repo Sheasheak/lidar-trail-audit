@@ -20,3 +20,4 @@ shapely
 pykml
 lxml
 rasterio
+Pillow

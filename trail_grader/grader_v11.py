@@ -382,6 +382,46 @@ def parse_kml(kml_bytes):
     return points
 
 
+def extract_photo_gps(photo_bytes):
+    """(lat, lon) from a JPEG's EXIF GPS tags, or None if absent/unreadable.
+    Prototype input path for the AI trail camera roadmap item — a
+    geotagged photo rather than GPMF video telemetry, which is a much
+    bigger lift to parse. Most phones and some action cameras geotag
+    still photos directly in EXIF when location is enabled."""
+    from PIL import ExifTags, Image
+
+    def _to_deg(value, ref):
+        d, m, s = value
+        deg = float(d) + float(m) / 60 + float(s) / 3600
+        return -deg if ref in ("S", "W") else deg
+
+    try:
+        img = Image.open(io.BytesIO(photo_bytes))
+        exif = img.getexif()
+        gps_ifd = exif.get_ifd(ExifTags.IFD.GPSInfo)
+        if not gps_ifd or 2 not in gps_ifd or 4 not in gps_ifd:
+            return None
+        lat = _to_deg(gps_ifd[2], gps_ifd.get(1, "N"))
+        lon = _to_deg(gps_ifd[4], gps_ifd.get(3, "E"))
+        return lat, lon
+    except Exception:
+        return None
+
+
+def nearest_chainage(points_wgs84_dense, lat, lon):
+    """Index of the 1 m-densified point closest to (lat, lon) — since the
+    line is sampled at ~1 m spacing, that index doubles as the chainage in
+    metres. Simple nearest-neighbour, not GIS snapping; good enough for
+    placing a hazard flagged from a GPS-tagged photo onto the same
+    chainage grid as the gradient/radius/sideslope data."""
+    best_i, best_d2 = 0, float("inf")
+    for i, (plon, plat) in enumerate(points_wgs84_dense):
+        d2 = (plon - lon) ** 2 + (plat - lat) ** 2
+        if d2 < best_d2:
+            best_i, best_d2 = i, d2
+    return best_i
+
+
 def bearing(p1, p2):
     return math.atan2(p2[1] - p1[1], p2[0] - p1[0])
 

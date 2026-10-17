@@ -195,6 +195,61 @@ DATA:
         return None
 
 
+MAX_VISION_PHOTOS = 6
+VISION_MODEL = "claude-opus-5"
+
+
+def analyze_trail_photo(photo_bytes, media_type='image/jpeg', api_key=None):
+    """AI trail camera prototype: send one photo to a vision-capable Claude
+    model, asking it to flag the technical features/hazards bare-earth
+    LiDAR can't see. This is the realistic near-term path from the
+    /roadmap/vision page, not the custom-trained production pipeline
+    documented there — sampling individual geotagged photos through an
+    existing model, no training involved. Returns a dict or None on
+    failure (bad key, model error, unparseable response)."""
+    client = anthropic.Anthropic(api_key=api_key) if (anthropic and api_key) else _anthropic_client
+    if not client:
+        return None
+    prompt = (
+        "This is a single photo taken on a mountain bike trail. Bare-earth LiDAR "
+        "elevation data already grades this trail's gradient, turn radius and "
+        "cross-slope — it cannot see what's in this photo: roots, loose rock, "
+        "jump lips or drops, erosion, exposure, or surface condition. Look only "
+        "for technical features or hazards actually visible in this photo.\n\n"
+        "Respond with ONLY a JSON object (no markdown fences, no other text):\n"
+        '  "hazard_found": true or false\n'
+        '  "summary": one short plain-English sentence describing what you see '
+        'that matters for a trail inspector, or "" if hazard_found is false\n'
+        '  "severity": "minor", "moderate", or "significant" if hazard_found is '
+        'true, otherwise null\n'
+        "Don't invent anything not visible in the photo — if it just looks like "
+        "unremarkable trail tread, hazard_found is false."
+    )
+    try:
+        import base64
+        b64 = base64.b64encode(photo_bytes).decode('ascii')
+        msg = client.messages.create(
+            model=VISION_MODEL, max_tokens=300,
+            messages=[{"role": "user", "content": [
+                {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64}},
+                {"type": "text", "text": prompt},
+            ]}],
+        )
+        text = next(b.text for b in msg.content if b.type == "text").strip()
+        if text.startswith('```'):
+            text = text.split('```')[1]
+            text = text[4:] if text.startswith('json') else text
+        data = json.loads(text.strip())
+        return {
+            'hazard_found': bool(data.get('hazard_found')),
+            'summary': (data.get('summary') or '').strip(),
+            'severity': data.get('severity'),
+        }
+    except Exception:
+        traceback.print_exc()
+        return None
+
+
 # User-uploaded DEMs for the editor's "grade any trail" option, keyed by
 # dem_id. Values are the (array, transform, nodata) tuple from
 # gv11.load_uploaded_dem, already reprojected — loaded once at upload time
@@ -477,6 +532,58 @@ def run_summary(run_id):
     if data is None:
         return jsonify({'error': 'Grading failed — see server console.'}), 500
     return jsonify(data)
+
+
+@app.route('/run/<run_id>/vision', methods=['POST'])
+@limiter.limit("10 per hour")
+def run_vision(run_id):
+    """AI trail camera prototype (see /roadmap/vision for the full
+    architecture and what this isn't). Each uploaded photo is matched to a
+    chainage via its own GPS EXIF, then sent to Claude vision to flag
+    hazards LiDAR can't see. Findings accumulate on the run across repeat
+    uploads rather than replacing each other."""
+    result = RUNS.get(run_id)
+    if result is None:
+        abort(404)
+    api_key = (request.form.get('api_key') or '').strip() or None
+    if not api_key and not _anthropic_client:
+        return jsonify({'error': 'No API key set — enter one above, or add ANTHROPIC_API_KEY to .env and restart.'}), 400
+
+    photos = request.files.getlist('photos')
+    if not photos:
+        return jsonify({'error': 'Choose at least one photo.'}), 400
+    if len(photos) > MAX_VISION_PHOTOS:
+        return jsonify({'error': f'Max {MAX_VISION_PHOTOS} photos per batch — try fewer at a time.'}), 400
+
+    points = result.get('points_wgs84_dense') or []
+    findings = []
+    for f in photos:
+        name = (f.filename or 'photo').lower()
+        if not name.endswith(('.jpg', '.jpeg', '.png')):
+            findings.append({'filename': f.filename, 'chainage_m': None, 'error': 'Not a JPEG/PNG — skipped.'})
+            continue
+        photo_bytes = f.read()
+        media_type = 'image/png' if name.endswith('.png') else 'image/jpeg'
+
+        gps = gv11.extract_photo_gps(photo_bytes) if media_type == 'image/jpeg' else None
+        chainage_m = lat = lon = None
+        if gps and points:
+            lat, lon = gps
+            chainage_m = gv11.nearest_chainage(points, lat, lon)
+
+        analysis = analyze_trail_photo(photo_bytes, media_type=media_type, api_key=api_key)
+        if analysis is None:
+            findings.append({'filename': f.filename, 'chainage_m': chainage_m,
+                             'error': 'Analysis failed — see server console.'})
+            continue
+
+        findings.append({
+            'filename': f.filename, 'chainage_m': chainage_m, 'lat': lat, 'lon': lon,
+            'gps_found': gps is not None, **analysis,
+        })
+
+    result.setdefault('vision_findings', []).extend(findings)
+    return jsonify({'findings': findings})
 
 
 def open_browser():
