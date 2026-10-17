@@ -105,12 +105,12 @@
     </div>
   </div>
 
-  <details class="grp">
+  <details class="grp" id="demDetails" open>
     <summary>DEM overlay opacity</summary>
     <div class="grp-body">
       <label class="row">Hillshade <input id="hsOp" type="range" min="0" max="1" step="0.05" value="0.55"></label>
       <label class="row">Slope <input id="slOp" type="range" min="0" max="1" step="0.05" value="0.55"></label>
-      <div class="hint">Hillshade/slope reveal the graded bench under tree canopy where aerial can't see it.</div>
+      <div class="hint">Hillshade/slope reveal the graded bench under tree canopy where aerial can't see it — on by default below.</div>
       <div class="hint" id="terrainStatus"></div>
     </div>
   </details>
@@ -184,8 +184,13 @@ const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
 
 const map = L.map("map", { center: ASKINS.center, zoom: 16, layers: [aerial] });
 
-const hillshade = L.imageOverlay("{{ url_for('static', filename='hillshade.png') }}", ASKINS.hillshadeBounds, { opacity: 0.55 });
-const slope     = L.imageOverlay("{{ url_for('static', filename='slope.png') }}",     ASKINS.slopeBounds,     { opacity: 0.55 });
+// .addTo(map) here, not just constructed, so both start ON (checked in the
+// layer control below) — previously they existed but weren't shown until
+// the user found and ticked the checkbox themselves, which combined with
+// the DEM panel being collapsed by default made the preview easy to miss
+// entirely, especially for a freshly-loaded (non-Askins) trail.
+const hillshade = L.imageOverlay("{{ url_for('static', filename='hillshade.png') }}", ASKINS.hillshadeBounds, { opacity: 0.55 }).addTo(map);
+const slope     = L.imageOverlay("{{ url_for('static', filename='slope.png') }}",     ASKINS.slopeBounds,     { opacity: 0.55 }).addTo(map);
 
 // Leaflet's default panes put tile layers (tilePane, z=200) below image/
 // vector overlays (overlayPane, z=400) regardless of which was toggled on
@@ -261,8 +266,15 @@ document.getElementById("reset").onclick = () => {
 };
 
 const terrainStatus = document.getElementById("terrainStatus");
+const demDetails = document.getElementById("demDetails");
 async function refreshTerrainOverlays(latlngs) {
-  terrainStatus.textContent = "Generating terrain overlay from live LINZ data…";
+  // Open the panel even if the user collapsed it — otherwise this status
+  // text (and the eventual overlay toggle itself) is invisible, which is
+  // exactly what made this feel broken for any trail outside Askins.
+  demDetails.open = true;
+  terrainStatus.textContent =
+    "Generating terrain overlay from live LINZ data — instant in Canterbury/Christchurch, " +
+    "can take several minutes elsewhere while LINZ exports the elevation data…";
   try {
     const resp = await fetch("/editor/terrain", {
       method: "POST",
@@ -275,6 +287,8 @@ async function refreshTerrainOverlays(latlngs) {
     hillshade.setBounds(data.bounds);
     slope.setUrl(data.slope_data_uri);
     slope.setBounds(data.bounds);
+    if (!map.hasLayer(hillshade)) hillshade.addTo(map);
+    if (!map.hasLayer(slope)) slope.addTo(map);
     terrainStatus.textContent = "";
   } catch (e) {
     terrainStatus.textContent = "Terrain unavailable: " + e.message;
