@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -8,20 +8,63 @@
 <meta name="description" content="Automated mountain bike trail grading from LiDAR elevation data, graded against the NZ MTB Trail Design & Construction Guidelines.">
 <link rel="stylesheet" href="{{ url_for('static', filename='audit.css') }}">
 <style>
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
   .hero {
-    padding: 64px 0 48px;
+    position: relative;
+    padding: 76px 0 54px;
     border-bottom: 1px solid var(--rule);
+    overflow: hidden;
   }
+  .hero::before {
+    content: "";
+    position: absolute; top: -220px; right: -160px;
+    width: 620px; height: 620px; border-radius: 50%;
+    background: radial-gradient(circle at 60% 40%, rgba(28,92,171,0.16), rgba(28,92,171,0) 65%);
+    pointer-events: none;
+  }
+  .hero::after {
+    content: "";
+    position: absolute; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='480' height='480'%3E%3Cg fill='none' stroke='%231c5cab' stroke-width='1.1'%3E%3Cpath d='M-20 48 Q 70 10 140 48 T 280 50 T 420 46 T 540 52' opacity='0.14'/%3E%3Cpath d='M-20 128 Q 80 92 150 130 T 290 126 T 430 132 T 540 128' opacity='0.12'/%3E%3Cpath d='M-20 208 Q 60 240 150 206 T 280 212 T 420 206 T 540 210' opacity='0.14'/%3E%3Cpath d='M-20 296 Q 90 330 160 294 T 300 300 T 440 296 T 540 298' opacity='0.1'/%3E%3Cpath d='M-20 376 Q 70 344 150 380 T 290 376 T 430 382 T 540 378' opacity='0.12'/%3E%3C/g%3E%3C/svg%3E");
+    background-size: 480px 480px;
+    -webkit-mask-image: linear-gradient(to bottom, black, transparent 88%);
+    mask-image: linear-gradient(to bottom, black, transparent 88%);
+    pointer-events: none;
+  }
+  .hero-content { position: relative; z-index: 1; animation: fadeUp 0.55s ease both; }
   .hero .eyebrow { justify-content: flex-start; }
   .hero h1 {
     font-family: var(--font-display); font-weight: 600;
-    font-size: 44px; line-height: 1.15; margin: 10px 0 16px;
-    max-width: 18ch;
+    font-size: 45px; line-height: 1.15; margin: 10px 0 16px;
+    max-width: 20ch;
+  }
+  .hero h1 .grad-text {
+    background: linear-gradient(95deg, var(--accent) 15%, var(--g3) 55%, var(--g1) 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
   }
   .hero .lede { font-size: 17px; color: var(--ink-2); max-width: 58ch; margin: 0 0 28px; }
   .hero .cta-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
   .hero .cta-row .sub { font-size: 13px; color: var(--ink-3); }
   a.btn-link { text-decoration: none; display: inline-block; }
+  .hero .cta-row button.primary {
+    box-shadow: 0 8px 20px rgba(28,92,171,0.28);
+    transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+  }
+  .hero .cta-row button.primary:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(28,92,171,0.34); }
+  .hero .cta-row button.ghost { transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease; }
+  .hero .cta-row button.ghost:hover { transform: translateY(-2px); }
+
+  .grade-spectrum { max-width: 420px; margin: 26px 0 0; }
+  .grade-spectrum .bar {
+    height: 8px; border-radius: 999px; overflow: hidden; display: flex;
+    box-shadow: inset 0 0 0 1px var(--hairline);
+  }
+  .grade-spectrum .bar i { flex: 1; }
+  .grade-spectrum .labels {
+    display: flex; justify-content: space-between; margin-top: 6px;
+    font-family: var(--font-mono); font-size: 11px; color: var(--ink-3);
+  }
 
   .pillrow { display: flex; gap: 8px; flex-wrap: wrap; margin: 18px 0 0; }
   .pill {
@@ -34,15 +77,30 @@
     display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 14px;
   }
-  .step { background: var(--surface); border-radius: 8px; padding: 18px 20px; }
+  .step {
+    background: var(--surface); border-radius: 10px; padding: 20px 20px 22px;
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+  }
+  .step:hover { transform: translateY(-3px); box-shadow: 0 14px 28px rgba(16,20,16,0.08); }
   .step .n {
-    font-family: var(--font-mono); font-size: 12px; color: var(--accent);
-    font-weight: 700; margin-bottom: 8px;
+    width: 32px; height: 32px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-mono); font-size: 12.5px; font-weight: 700;
+    color: var(--surface);
+    background: linear-gradient(135deg, var(--accent), var(--g3));
+    box-shadow: 0 4px 10px rgba(28,92,171,0.26);
+    margin-bottom: 12px;
   }
   .step h3 { font-family: var(--font-body); font-size: 14.5px; margin: 0 0 6px; }
   .step p { font-size: 13px; color: var(--ink-2); margin: 0; }
 
+  .card {
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+  }
+  .grid-2 .card:not(.roadmap-card):hover { transform: translateY(-3px); box-shadow: 0 14px 28px rgba(16,20,16,0.08); }
+
   .roadmap-card { border: 1px dashed var(--rule); background: transparent; }
+  .roadmap-card:hover { transform: translateY(-3px); border-color: var(--accent); box-shadow: 0 10px 22px rgba(28,92,171,0.1); }
   .roadmap-badge {
     display: inline-block; font-family: var(--font-mono); font-size: 10.5px;
     letter-spacing: 0.04em; text-transform: uppercase;
@@ -51,33 +109,50 @@
   }
 
   footer { margin-top: 60px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hero-content { animation: none; }
+  }
 </style>
 </head>
 <body>
 <div class="sheet wide">
 
   <section class="hero" style="margin-top:0">
-    <p class="eyebrow">
-      <span class="title" style="color:var(--ink);font-weight:600">TrailSafe</span>
-      <span>LiDAR trail audit</span>
-    </p>
-    <h1>Grade a trail from the terrain, not a stopwatch.</h1>
-    <p class="lede">
-      Give it a trail line and TrailSafe samples 1&nbsp;m LiDAR elevation along it, measures
-      gradient, turn radius and cross-slope at every metre, and grades the result against the
-      <strong>NZ Mountain Bike Trail Design &amp; Construction Guidelines</strong> — automatically,
-      in about 30 seconds, anywhere in New Zealand with LiDAR coverage.
-    </p>
-    <div class="cta-row">
-      <a class="btn-link" href="{{ url_for('editor') }}"><button type="button" class="primary">Grade a trail →</button></a>
-      <a class="btn-link" href="{{ url_for('grade_form') }}"><button type="button" class="ghost">Quick audit (no map editing)</button></a>
-      <span class="sub">No GIS experience needed — draw a line or upload a KML.</span>
-    </div>
-    <div class="pillrow">
-      <span class="pill">Live LINZ 1 m LiDAR</span>
-      <span class="pill">NZ MTB Guidelines, Recreation Aotearoa</span>
-      <span class="pill">Nationwide coverage</span>
-      <span class="pill">Out-of-grade section reporting</span>
+    <div class="hero-content">
+      <p class="eyebrow">
+        <span class="title" style="color:var(--ink);font-weight:600">TrailSafe</span>
+        <span>LiDAR trail audit</span>
+      </p>
+      <h1>Grade a trail from <span class="grad-text">the terrain</span>, not a stopwatch.</h1>
+      <p class="lede">
+        Give it a trail line and TrailSafe samples 1&nbsp;m LiDAR elevation along it, measures
+        gradient, turn radius and cross-slope at every metre, and grades the result against the
+        <strong>NZ Mountain Bike Trail Design &amp; Construction Guidelines</strong> — automatically,
+        in about 30 seconds, anywhere in New Zealand with LiDAR coverage.
+      </p>
+      <div class="cta-row">
+        <a class="btn-link" href="{{ url_for('editor') }}"><button type="button" class="primary">Grade a trail →</button></a>
+        <a class="btn-link" href="{{ url_for('grade_form') }}"><button type="button" class="ghost">Quick audit (no map editing)</button></a>
+        <span class="sub">No GIS experience needed — draw a line or upload a KML.</span>
+      </div>
+      <p style="font-size:12.5px;color:var(--ink-3);margin:14px 0 0">
+        <a href="/legacy/" style="color:var(--ink-3)">Original version (for Space Prize judges) →</a>
+      </p>
+      <div class="grade-spectrum">
+        <div class="bar">
+          <i style="background:var(--g1)"></i><i style="background:var(--g2)"></i>
+          <i style="background:var(--g3)"></i><i style="background:var(--g4)"></i>
+          <i style="background:var(--g5)"></i><i style="background:var(--g6)"></i>
+        </div>
+        <div class="labels"><span>Grade 1 — easiest</span><span>Grade 6 — extreme</span></div>
+      </div>
+      <div class="pillrow">
+        <span class="pill">Live LINZ 1 m LiDAR</span>
+        <span class="pill">NZ MTB Guidelines, Recreation Aotearoa</span>
+        <span class="pill">Nationwide coverage</span>
+        <span class="pill">Out-of-grade section reporting</span>
+      </div>
     </div>
   </section>
 
