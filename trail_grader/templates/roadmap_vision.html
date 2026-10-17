@@ -16,10 +16,14 @@
     --esri-rail: #f2f4f6;
     --esri-rail-ink: #5c6670;
     --esri-rule: #dde2e6;
+    --st-research: #e8a400; --st-research-bg: #fff4de; --st-research-ink: #8a5a00;
+    --st-planned: #9aa4ac;  --st-planned-bg: #e9edf0;  --st-planned-ink: #5c6670;
+    --st-live: #2fb34f;     --st-live-bg: #e3f6e6;     --st-live-ink: #1c7a34;
+    --st-blocked: #d64545;  --st-blocked-bg: #fdeaea;  --st-blocked-ink: #b3302f;
   }
 
   body { background: #e9edf0; }
-  .sheet.wide { max-width: 1280px; }
+  .sheet.wide { max-width: 1320px; }
 
   /* ---------- app chrome ---------- */
   .appbar {
@@ -40,14 +44,30 @@
   .crumb a:hover { color: var(--esri-blue); text-decoration: underline; }
 
   .app-shell {
-    display: grid; grid-template-columns: 220px 1fr; gap: 0;
+    display: grid; grid-template-columns: 54px 212px 1fr; gap: 0;
     background: var(--esri-panel);
     border: 1px solid var(--esri-rule);
     margin-top: 0;
     min-height: 70vh;
   }
 
-  /* ---------- sidebar ---------- */
+  /* ---------- icon action rail ---------- */
+  .icon-rail {
+    background: var(--esri-blue-dark);
+    display: flex; flex-direction: column; align-items: center;
+    padding: 14px 0; gap: 4px;
+  }
+  .icon-rail button {
+    width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
+    border: 0; border-radius: 6px; background: transparent; color: #bfe0f2; cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
+  }
+  .icon-rail button:hover { background: rgba(255,255,255,0.14); color: #fff; }
+  .icon-rail button.active { background: var(--esri-blue); color: #fff; }
+  .icon-rail svg { width: 18px; height: 18px; }
+  .icon-rail .spacer { flex: 1; }
+
+  /* ---------- text sidebar ---------- */
   .rail {
     background: var(--esri-rail);
     border-right: 1px solid var(--esri-rule);
@@ -75,21 +95,49 @@
   }
   .page-head .lede { font-size: 14.5px; color: var(--ink-2); max-width: 70ch; margin: 0 0 16px; }
 
-  .status-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 26px; }
+  .status-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
   .chip {
     font-family: var(--font-mono); font-size: 11px; font-weight: 700;
     letter-spacing: 0.02em; text-transform: uppercase;
     padding: 4px 10px; border-radius: 3px; display: inline-flex; align-items: center; gap: 6px;
   }
   .chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
-  .chip.research { background: #fff4de; color: #8a5a00; }
-  .chip.research::before { background: #e8a400; }
-  .chip.planned { background: #e9edf0; color: #5c6670; }
-  .chip.planned::before { background: #9aa4ac; }
-  .chip.live { background: #e3f6e6; color: #1c7a34; }
-  .chip.live::before { background: #2fb34f; }
-  .chip.blocked { background: #fdeaea; color: #b3302f; }
-  .chip.blocked::before { background: #d64545; }
+  .chip.research { background: var(--st-research-bg); color: var(--st-research-ink); }
+  .chip.research::before { background: var(--st-research); }
+  .chip.planned { background: var(--st-planned-bg); color: var(--st-planned-ink); }
+  .chip.planned::before { background: var(--st-planned); }
+  .chip.live { background: var(--st-live-bg); color: var(--st-live-ink); }
+  .chip.live::before { background: var(--st-live); }
+  .chip.blocked { background: var(--st-blocked-bg); color: var(--st-blocked-ink); }
+  .chip.blocked::before { background: var(--st-blocked); }
+
+  /* ---------- toolbar (widget row) ---------- */
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 18px; position: relative; }
+  .tool-btn {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-family: var(--font-body); font-size: 12.5px; font-weight: 600;
+    padding: 7px 12px 7px 10px; border: 1px solid var(--esri-rule); border-radius: 5px;
+    background: #fff; color: var(--ink-2); cursor: pointer;
+  }
+  .tool-btn:hover { background: var(--esri-rail); color: var(--ink); }
+  .tool-btn.active { background: var(--esri-blue); border-color: var(--esri-blue); color: #fff; }
+  .tool-btn svg { width: 14px; height: 14px; flex: none; }
+  .tool-sep { width: 1px; height: 20px; background: var(--esri-rule); margin: 0 2px; }
+  .tool-hint { font-family: var(--font-mono); font-size: 11px; color: var(--esri-rail-ink); }
+
+  .legend-pop {
+    position: absolute; top: calc(100% + 6px); left: 0; z-index: 6;
+    background: #fff; border: 1px solid var(--esri-rule); border-radius: 6px;
+    box-shadow: 0 8px 22px rgba(16,20,16,0.14); padding: 10px 14px; min-width: 210px;
+    display: none;
+  }
+  .legend-pop.open { display: block; }
+  .legend-pop .lg-title {
+    font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--esri-rail-ink); margin-bottom: 6px;
+  }
+  .legend-pop .lg-row { display: flex; align-items: center; gap: 9px; font-size: 12.5px; color: var(--ink-2); padding: 3.5px 0; }
+  .legend-pop .lg-row i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; }
 
   /* ---------- pipeline diagram ---------- */
   .pipeline {
@@ -98,8 +146,9 @@
   }
   .pipe-stage {
     background: var(--esri-panel); padding: 14px 12px 16px; position: relative;
-    border-right: 1px solid var(--esri-rule);
+    border-right: 1px solid var(--esri-rule); cursor: pointer;
   }
+  .pipe-stage:hover { background: var(--esri-rail); }
   .pipe-stage:last-child { border-right: 0; }
   .pipe-stage .pn {
     font-family: var(--font-mono); font-size: 10px; color: var(--esri-rail-ink); margin-bottom: 6px;
@@ -116,20 +165,32 @@
   }
   .pipe-stage:last-child::after { content: ""; }
 
-  /* ---------- stage detail cards ---------- */
+  /* ---------- stage detail cards (accordion) ---------- */
   .stage-card {
-    border: 1px solid var(--esri-rule); border-radius: 6px; margin-bottom: 16px; overflow: hidden; scroll-margin-top: 20px;
+    border: 1px solid var(--esri-rule); border-left: 4px solid var(--esri-rule);
+    border-radius: 6px; margin-bottom: 10px; overflow: hidden; scroll-margin-top: 20px;
   }
+  .stage-card[data-status="research"] { border-left-color: var(--st-research); }
+  .stage-card[data-status="planned"]  { border-left-color: var(--st-planned); }
+  .stage-card[data-status="live"]     { border-left-color: var(--st-live); }
+  .stage-card[data-status="blocked"]  { border-left-color: var(--st-blocked); }
+
   .stage-card .sc-head {
     display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-    padding: 14px 18px; background: var(--esri-rail); border-bottom: 1px solid var(--esri-rule);
+    padding: 13px 16px; background: var(--esri-rail);
+    cursor: pointer; user-select: none;
   }
+  .stage-card .sc-head:hover { background: #e9edf0; }
   .stage-card .sc-head .idx {
     font-family: var(--font-mono); font-size: 11px; color: var(--esri-blue); font-weight: 700;
     background: #e4edf4; border-radius: 3px; padding: 2px 8px;
   }
-  .stage-card .sc-head h3 { font-family: var(--font-body); font-size: 15px; margin: 0; flex: 1; min-width: 160px; }
-  .stage-card .sc-body { padding: 16px 18px 18px; }
+  .stage-card .sc-head h3 { font-family: var(--font-body); font-size: 15px; margin: 0; flex: 1; min-width: 140px; }
+  .stage-card .chev { width: 16px; height: 16px; color: var(--esri-rail-ink); transition: transform 0.18s ease; flex: none; }
+  .stage-card.open .chev { transform: rotate(180deg); }
+  .stage-card .sc-body-wrap { max-height: 0; overflow: hidden; transition: max-height 0.22s ease; }
+  .stage-card.open .sc-body-wrap { max-height: 900px; }
+  .stage-card .sc-body { padding: 16px 18px 18px; border-top: 1px solid var(--esri-rule); }
   .stage-card .sc-body p { font-size: 13.5px; color: var(--ink-2); margin: 0 0 12px; max-width: 76ch; }
   .sc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-top: 12px; }
   .sc-block { background: var(--esri-rail); border-radius: 5px; padding: 12px 14px; }
@@ -140,15 +201,26 @@
   .sc-block ul { margin: 0; padding-left: 16px; font-size: 12.5px; color: var(--ink-2); }
   .sc-block li { margin-bottom: 3px; }
 
-  /* ---------- comparison table ---------- */
+  /* ---------- stats panel (gated behind "Show stats") ---------- */
+  .stat-strip {
+    display: flex; gap: 18px; flex-wrap: wrap; align-items: baseline;
+    font-family: var(--font-mono); font-size: 12px; color: var(--ink-2);
+    padding: 10px 14px; background: var(--esri-rail); border: 1px solid var(--esri-rule);
+    border-radius: 6px; margin-bottom: 18px;
+  }
+  .stat-strip b { color: var(--ink); font-family: var(--font-body); }
+
+  #stats-panel { margin-bottom: 10px; }
+  #stats-panel[hidden] { display: none; }
+
   .spec-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
   .spec-table th, .spec-table td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--esri-rule); vertical-align: top; }
   .spec-table thead th {
     font-family: var(--font-mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em;
     color: var(--esri-rail-ink); background: var(--esri-rail); border-bottom: 1px solid var(--esri-rule);
   }
-  .spec-table td.yes { color: #1c7a34; font-weight: 600; }
-  .spec-table td.no { color: #b3302f; }
+  .spec-table td.yes { color: var(--st-live-ink); font-weight: 600; }
+  .spec-table td.no { color: var(--st-blocked-ink); }
 
   .callout {
     border-left: 3px solid var(--esri-blue); background: #f2f8fc;
@@ -164,6 +236,7 @@
 
   @media (max-width: 860px) {
     .app-shell { grid-template-columns: 1fr; }
+    .icon-rail { display: none; }
     .rail { border-right: 0; border-bottom: 1px solid var(--esri-rule); }
     .pipeline { grid-template-columns: repeat(2, 1fr); }
     .pipe-stage::after { display: none; }
@@ -179,6 +252,25 @@
   </div>
 
   <div class="app-shell">
+    <div class="icon-rail">
+      <button type="button" data-scroll="#overview" title="Overview" aria-label="Jump to overview">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l5 5v13H6z"/><path d="M14 3v6h6"/></svg>
+      </button>
+      <button type="button" data-scroll="#pipeline" title="Pipeline" aria-label="Jump to pipeline">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="2.1"/><circle cx="12" cy="12" r="2.1"/><circle cx="19" cy="12" r="2.1"/><path d="M7.1 12h2.7M14.2 12h2.7"/></svg>
+      </button>
+      <button type="button" data-scroll="#stage-detail" title="Stage detail" aria-label="Jump to stage detail">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 3 8l9 5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>
+      </button>
+      <button type="button" id="iconStatsBtn" title="Show stats" aria-label="Toggle stats panel">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>
+      </button>
+      <div class="spacer"></div>
+      <button type="button" id="iconLegendBtn" title="Legend" aria-label="Toggle legend">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg>
+      </button>
+    </div>
+
     <nav class="rail">
       <div class="rail-label">On this page</div>
       <a href="#overview">Overview</a>
@@ -190,7 +282,7 @@
       <a href="#fusion">5. Fusion with LiDAR</a>
       <a href="#review">6. Field review UI</a>
       <hr>
-      <a href="#why-hard">Why this is the hard version</a>
+      <a href="#why-hard">LiDAR vs camera</a>
       <a href="{{ url_for('index') }}" class="current">← Back to TrailSafe</a>
     </nav>
 
@@ -212,6 +304,30 @@
         <span class="chip planned">Not integrated into grading pipeline</span>
       </div>
 
+      <div class="toolbar">
+        <button type="button" class="tool-btn" id="expandAllBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 3 8l9 5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>
+          <span class="lbl">Expand all stages</span>
+        </button>
+        <button type="button" class="tool-btn" id="statsBtn" aria-expanded="false" aria-controls="stats-panel">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>
+          <span class="lbl">Show stats</span>
+        </button>
+        <button type="button" class="tool-btn" id="legendBtn" aria-expanded="false" aria-controls="legend-pop">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg>
+          <span class="lbl">Legend</span>
+        </button>
+        <div class="legend-pop" id="legend-pop">
+          <div class="lg-title">Status key</div>
+          <div class="lg-row"><i style="background:var(--st-live)"></i>Live — shipped and working today</div>
+          <div class="lg-row"><i style="background:var(--st-research)"></i>Research — approach not settled</div>
+          <div class="lg-row"><i style="background:var(--st-planned)"></i>Planned — designed, not started</div>
+          <div class="lg-row"><i style="background:var(--st-blocked)"></i>Blocked — waiting on a prerequisite</div>
+        </div>
+        <span class="tool-sep"></span>
+        <span class="tool-hint">6 stages · 1 research · 1 blocked · 4 planned</span>
+      </div>
+
       <div class="callout">
         <strong>Honest status:</strong> nothing on this page is built yet. This is the architecture TrailSafe is
         designing toward, published so DOC and anyone else following the project can see the actual shape of the
@@ -221,23 +337,26 @@
       </div>
 
       <section id="pipeline">
-        <div class="sec-head"><h2>Pipeline</h2><div class="note">Six stages, footage to graded output</div></div>
+        <div class="sec-head"><h2>Pipeline</h2><div class="note">Six stages, footage to graded output — click a stage to jump to it</div></div>
         <div class="pipeline">
-          <div class="pipe-stage"><div class="pn">01</div><h4>Capture</h4><span class="chip planned">Planned</span></div>
-          <div class="pipe-stage"><div class="pn">02</div><h4>Chainage alignment</h4><span class="chip planned">Planned</span></div>
-          <div class="pipe-stage"><div class="pn">03</div><h4>Detection model</h4><span class="chip research">Research</span></div>
-          <div class="pipe-stage"><div class="pn">04</div><h4>Training data</h4><span class="chip blocked">Blocked</span></div>
-          <div class="pipe-stage"><div class="pn">05</div><h4>Fusion with LiDAR</h4><span class="chip planned">Planned</span></div>
-          <div class="pipe-stage"><div class="pn">06</div><h4>Field review UI</h4><span class="chip planned">Planned</span></div>
+          <div class="pipe-stage" data-jump="#capture"><div class="pn">01</div><h4>Capture</h4><span class="chip planned">Planned</span></div>
+          <div class="pipe-stage" data-jump="#align"><div class="pn">02</div><h4>Chainage alignment</h4><span class="chip planned">Planned</span></div>
+          <div class="pipe-stage" data-jump="#model"><div class="pn">03</div><h4>Detection model</h4><span class="chip research">Research</span></div>
+          <div class="pipe-stage" data-jump="#data"><div class="pn">04</div><h4>Training data</h4><span class="chip blocked">Blocked</span></div>
+          <div class="pipe-stage" data-jump="#fusion"><div class="pn">05</div><h4>Fusion with LiDAR</h4><span class="chip planned">Planned</span></div>
+          <div class="pipe-stage" data-jump="#review"><div class="pn">06</div><h4>Field review UI</h4><span class="chip planned">Planned</span></div>
         </div>
       </section>
 
-      <section>
+      <section id="stage-detail">
         <div class="sec-head"><h2>Stage detail</h2><div class="note">What each stage needs, and what's blocking it</div></div>
 
-        <div class="stage-card" id="capture">
-          <div class="sc-head"><span class="idx">01</span><h3>Capture</h3><span class="chip planned">Planned</span></div>
-          <div class="sc-body">
+        <div class="stage-card" id="capture" data-status="planned">
+          <div class="sc-head" tabindex="0" role="button" aria-expanded="false" aria-controls="capture-body">
+            <span class="idx">01</span><h3>Capture</h3><span class="chip planned">Planned</span>
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+          <div class="sc-body-wrap"><div class="sc-body" id="capture-body">
             <p>Rider-mounted or trailside camera footage, GPS-synced so every frame can later be placed at a
               chainage position along the same trail line LiDAR already samples. Action cameras with onboard GPS
               (GoPro GPMF metadata, phone-logged tracks) make this the most tractable stage — it's closer to data
@@ -252,12 +371,15 @@
                 <li>Storage cost of raw video at any meaningful trail-network scale</li>
               </ul></div>
             </div>
-          </div>
+          </div></div>
         </div>
 
-        <div class="stage-card" id="align">
-          <div class="sc-head"><span class="idx">02</span><h3>Chainage alignment</h3><span class="chip planned">Planned</span></div>
-          <div class="sc-body">
+        <div class="stage-card" id="align" data-status="planned">
+          <div class="sc-head" tabindex="0" role="button" aria-expanded="false" aria-controls="align-body">
+            <span class="idx">02</span><h3>Chainage alignment</h3><span class="chip planned">Planned</span>
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+          <div class="sc-body-wrap"><div class="sc-body" id="align-body">
             <p>Matching each frame's GPS fix to the nearest station on the already-sampled trail line, so a
               detected hazard lands on the same 1 m chainage grid as the gradient/radius/sideslope data — not a
               separate, disconnected location system.</p>
@@ -267,12 +389,15 @@
                 <li>A snap-to-line routine against the existing trail geometry</li>
               </ul></div>
             </div>
-          </div>
+          </div></div>
         </div>
 
-        <div class="stage-card" id="model">
-          <div class="sc-head"><span class="idx">03</span><h3>Detection model</h3><span class="chip research">Research</span></div>
-          <div class="sc-body">
+        <div class="stage-card" id="model" data-status="research">
+          <div class="sc-head" tabindex="0" role="button" aria-expanded="false" aria-controls="model-body">
+            <span class="idx">03</span><h3>Detection model</h3><span class="chip research">Research</span>
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+          <div class="sc-body-wrap"><div class="sc-body" id="model-body">
             <p>The actual computer-vision model: given a frame or short clip, classify trail-specific hazard and
               feature classes — roots, loose rock, jump lips, drops, erosion, surface type. This is the stage
               that decides whether the whole pipeline is worth building, and it's the one with no settled answer
@@ -287,12 +412,15 @@
                 <li>Accuracy target before a flagged hazard is trustworthy enough to act on unreviewed</li>
               </ul></div>
             </div>
-          </div>
+          </div></div>
         </div>
 
-        <div class="stage-card" id="data">
-          <div class="sc-head"><span class="idx">04</span><h3>Training data</h3><span class="chip blocked">Blocked</span></div>
-          <div class="sc-body">
+        <div class="stage-card" id="data" data-status="blocked">
+          <div class="sc-head" tabindex="0" role="button" aria-expanded="false" aria-controls="data-body">
+            <span class="idx">04</span><h3>Training data</h3><span class="chip blocked">Blocked</span>
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+          <div class="sc-body-wrap"><div class="sc-body" id="data-body">
             <p>The actual bottleneck. A custom detector needs a labelled dataset of NZ mountain bike trail footage
               with hazards and features annotated frame-by-frame — roots, rocks, jump lips, surface condition. No
               such public dataset exists. Building one means filming a representative spread of trail types and
@@ -305,12 +433,15 @@
                 <li>Volunteer or paid annotation effort — this doesn't automate</li>
               </ul></div>
             </div>
-          </div>
+          </div></div>
         </div>
 
-        <div class="stage-card" id="fusion">
-          <div class="sc-head"><span class="idx">05</span><h3>Fusion with LiDAR grading</h3><span class="chip planned">Planned</span></div>
-          <div class="sc-body">
+        <div class="stage-card" id="fusion" data-status="planned">
+          <div class="sc-head" tabindex="0" role="button" aria-expanded="false" aria-controls="fusion-body">
+            <span class="idx">05</span><h3>Fusion with LiDAR grading</h3><span class="chip planned">Planned</span>
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+          <div class="sc-body-wrap"><div class="sc-body" id="fusion-body">
             <p>Feeding detected hazards into the existing grading pipeline as a field-observation layer, the same
               role manual field notes play today — shown on the map alongside the gradient/radius/sideslope
               layers already live, at the chainage stage 02 computed, instead of a separate report.</p>
@@ -320,31 +451,43 @@
                 <li>Manual field-note pin dropping — the interim version of this, already live</li>
               </ul></div>
             </div>
-          </div>
+          </div></div>
         </div>
 
-        <div class="stage-card" id="review">
-          <div class="sc-head"><span class="idx">06</span><h3>Field review UI</h3><span class="chip planned">Planned</span></div>
-          <div class="sc-body">
+        <div class="stage-card" id="review" data-status="planned">
+          <div class="sc-head" tabindex="0" role="button" aria-expanded="false" aria-controls="review-body">
+            <span class="idx">06</span><h3>Field review UI</h3><span class="chip planned">Planned</span>
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+          <div class="sc-body-wrap"><div class="sc-body" id="review-body">
             <p>Automated detection won't be trusted unreviewed from day one — an inspector needs a fast way to
               confirm or dismiss each flagged frame before it counts toward a grade. This is the human-in-the-loop
               layer that makes an imperfect model usable in practice.</p>
-          </div>
+          </div></div>
         </div>
       </section>
 
       <section id="why-hard">
-        <div class="sec-head"><h2>LiDAR vs camera — what each can actually see</h2></div>
-        <table class="spec-table">
-          <thead><tr><th>Trail property</th><th>Bare-earth LiDAR (live today)</th><th>Camera + AI (this roadmap)</th></tr></thead>
-          <tbody>
-            <tr><td>Gradient, turn radius</td><td class="yes">Yes — graded automatically</td><td>Not needed</td></tr>
-            <tr><td>Cross-slope / sideslope exposure</td><td class="yes">Yes — graded automatically</td><td>Not needed</td></tr>
-            <tr><td>Roots, loose rock</td><td class="no">No — sits above the bare-earth surface</td><td class="yes">Target capability</td></tr>
-            <tr><td>Jump lips, drops, tabletops</td><td class="no">No</td><td class="yes">Target capability</td></tr>
-            <tr><td>Surface condition (sealed/loose/mud)</td><td class="no">No</td><td class="yes">Target capability</td></tr>
-          </tbody>
-        </table>
+        <div class="sec-head"><h2>LiDAR vs camera</h2><div class="note">What each can actually see</div></div>
+
+        <div class="stat-strip">
+          <span><b>3</b> of 5 trail properties</span>
+          <span>already <b>live</b> via LiDAR</span>
+          <span><b>3</b> are camera-roadmap targets</span>
+        </div>
+
+        <div id="stats-panel" hidden>
+          <table class="spec-table">
+            <thead><tr><th>Trail property</th><th>Bare-earth LiDAR (live today)</th><th>Camera + AI (this roadmap)</th></tr></thead>
+            <tbody>
+              <tr><td>Gradient, turn radius</td><td class="yes">Yes — graded automatically</td><td>Not needed</td></tr>
+              <tr><td>Cross-slope / sideslope exposure</td><td class="yes">Yes — graded automatically</td><td>Not needed</td></tr>
+              <tr><td>Roots, loose rock</td><td class="no">No — sits above the bare-earth surface</td><td class="yes">Target capability</td></tr>
+              <tr><td>Jump lips, drops, tabletops</td><td class="no">No</td><td class="yes">Target capability</td></tr>
+              <tr><td>Surface condition (sealed/loose/mud)</td><td class="no">No</td><td class="yes">Target capability</td></tr>
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <div class="footbar">
@@ -354,5 +497,82 @@
     </div>
   </div>
 </div>
+
+<script>
+(function () {
+  function toggleCard(card, open) {
+    var head = card.querySelector('.sc-head');
+    var willOpen = open === undefined ? !card.classList.contains('open') : open;
+    card.classList.toggle('open', willOpen);
+    head.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+  }
+
+  document.querySelectorAll('.stage-card .sc-head').forEach(function (head) {
+    var card = head.closest('.stage-card');
+    head.addEventListener('click', function () { toggleCard(card); });
+    head.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleCard(card); }
+    });
+  });
+
+  var expandAllBtn = document.getElementById('expandAllBtn');
+  expandAllBtn.addEventListener('click', function () {
+    var cards = document.querySelectorAll('.stage-card');
+    var anyClosed = Array.prototype.some.call(cards, function (c) { return !c.classList.contains('open'); });
+    cards.forEach(function (c) { toggleCard(c, anyClosed); });
+    expandAllBtn.querySelector('.lbl').textContent = anyClosed ? 'Collapse all stages' : 'Expand all stages';
+    expandAllBtn.classList.toggle('active', anyClosed);
+  });
+
+  var statsBtn = document.getElementById('statsBtn');
+  var statsPanel = document.getElementById('stats-panel');
+  function setStats(show) {
+    if (show) { statsPanel.removeAttribute('hidden'); } else { statsPanel.setAttribute('hidden', ''); }
+    statsBtn.classList.toggle('active', show);
+    statsBtn.setAttribute('aria-expanded', show ? 'true' : 'false');
+    statsBtn.querySelector('.lbl').textContent = show ? 'Hide stats' : 'Show stats';
+  }
+  statsBtn.addEventListener('click', function () {
+    var show = statsPanel.hasAttribute('hidden');
+    setStats(show);
+    if (show) { statsPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+  });
+
+  var legendBtn = document.getElementById('legendBtn');
+  var legendPop = document.getElementById('legend-pop');
+  legendBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    var open = !legendPop.classList.contains('open');
+    legendPop.classList.toggle('open', open);
+    legendBtn.classList.toggle('active', open);
+    legendBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+  document.addEventListener('click', function (e) {
+    if (legendPop.classList.contains('open') && !legendPop.contains(e.target) && e.target !== legendBtn) {
+      legendPop.classList.remove('open');
+      legendBtn.classList.remove('active');
+      legendBtn.setAttribute('aria-expanded', 'false');
+    }
+  });
+
+  document.querySelectorAll('[data-scroll]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var el = document.querySelector(btn.getAttribute('data-scroll'));
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
+  document.querySelectorAll('.pipe-stage[data-jump]').forEach(function (stage) {
+    stage.addEventListener('click', function () {
+      var el = document.querySelector(stage.getAttribute('data-jump'));
+      if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); toggleCard(el, true); }
+    });
+  });
+
+  var iconStats = document.getElementById('iconStatsBtn');
+  if (iconStats) iconStats.addEventListener('click', function () { statsBtn.click(); document.getElementById('why-hard').scrollIntoView({ behavior: 'smooth' }); });
+  var iconLegend = document.getElementById('iconLegendBtn');
+  if (iconLegend) iconLegend.addEventListener('click', function () { legendBtn.click(); });
+})();
+</script>
 </body>
 </html>
