@@ -80,7 +80,11 @@ def logout():
 @login_required
 def account():
     runs = current_user.runs.all()
-    return render_template('account.html', runs=runs, grade_colours=gv11.GRADE_COLOURS)
+    runs_geo = [{
+        'id': r.id, 'trail_name': r.trail_name, 'lat': r.centroid_lat, 'lon': r.centroid_lon,
+        'overall_grade': r.overall_grade, 'length_m': r.trail_length_m,
+    } for r in runs if r.centroid_lat is not None and r.centroid_lon is not None]
+    return render_template('account.html', runs=runs, runs_geo=runs_geo, grade_colours=gv11.GRADE_COLOURS)
 
 
 @auth_bp.route('/account/rename/<int:saved_run_id>', methods=['POST'])

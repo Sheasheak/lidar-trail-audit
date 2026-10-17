@@ -6,6 +6,8 @@
 <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
 <title>My account — TrailSafe</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='audit.css') }}">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </head>
 <body>
 <div class="sheet wide">
@@ -24,6 +26,16 @@
 
   {% if error %}
   <div class="errorbox" role="alert"><b>That run didn't finish</b>{{ error }}</div>
+  {% endif %}
+
+  {% if runs_geo %}
+  <section style="margin-top:28px">
+    <div class="sec-head">
+      <h2>Map</h2>
+      <div class="note">Where your saved trails are — click a pin to open it</div>
+    </div>
+    <div id="savedMap" style="height:420px;border-radius:8px;border:1px solid var(--hairline)"></div>
+  </section>
   {% endif %}
 
   <section style="margin-top:28px">
@@ -80,5 +92,38 @@
   </section>
 
 </div>
+{% if runs_geo %}
+<script>
+const RUNS_GEO = {{ runs_geo | tojson }};
+const GRADE_COLOURS = {{ ['', '#00b300', '#66cc00', '#00aaff', '#0044cc', '#000000', '#e60000'] | tojson }};
+
+const map = L.map('savedMap');
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OpenStreetMap contributors', maxZoom: 19,
+}).addTo(map);
+
+const markers = RUNS_GEO.map(r => {
+  const colour = GRADE_COLOURS[r.overall_grade] || '#1c5cab';
+  const marker = L.circleMarker([r.lat, r.lon], {
+    radius: 8, color: '#fff', weight: 2, fillColor: colour, fillOpacity: 0.95,
+  }).addTo(map);
+  const gradeText = r.overall_grade ? ('Grade ' + r.overall_grade) : 'Ungraded';
+  const lengthText = r.length_m ? Math.round(r.length_m) + ' m' : '';
+  marker.bindPopup(
+    '<b>' + r.trail_name.replace(/</g, '&lt;') + '</b><br>' +
+    gradeText + (lengthText ? ' · ' + lengthText : '') + '<br>' +
+    '<form method="post" action="/account/rerun/' + r.id + '" style="margin-top:6px">' +
+    '<button type="submit">View →</button></form>'
+  );
+  return marker;
+});
+
+if (markers.length === 1) {
+  map.setView(markers[0].getLatLng(), 13);
+} else {
+  map.fitBounds(L.featureGroup(markers).getBounds().pad(0.2));
+}
+</script>
+{% endif %}
 </body>
 </html>

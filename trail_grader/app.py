@@ -368,11 +368,15 @@ def _save_run(run_id, user, trail_name, kml_bytes, stated_grade, want_sideslope,
     """Shared by /audit's auto-save (when already signed in) and the result
     page's explicit "Save to my account" button (for a run that happened
     before signing in, or a custom-DEM run's text-only fields)."""
+    pts = result.get('points_wgs84_dense') or []
+    centroid_lat = sum(p[1] for p in pts) / len(pts) if pts else None
+    centroid_lon = sum(p[0] for p in pts) / len(pts) if pts else None
     saved = SavedRun(
         user_id=user.id, trail_name=trail_name, kml_bytes=kml_bytes,
         stated_grade=stated_grade, want_sideslope=want_sideslope,
         overall_grade=result.get('overall_grade'), avg_gradient=result.get('avg_gradient'),
         trail_length_m=result.get('trail_length_m'), out_of_grade_pct=result.get('out_of_grade_pct'),
+        centroid_lat=centroid_lat, centroid_lon=centroid_lon,
     )
     db.session.add(saved)
     db.session.commit()

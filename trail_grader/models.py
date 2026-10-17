@@ -50,3 +50,9 @@ class SavedRun(db.Model):
     avg_gradient = db.Column(db.Float)
     trail_length_m = db.Column(db.Float)
     out_of_grade_pct = db.Column(db.Float)
+
+    # Mean of the trail line's own points — just enough to place a pin on
+    # the account page's saved-trails map, not a replacement for the full
+    # line (that still only lives in kml_bytes, parsed fresh on rerun).
+    centroid_lat = db.Column(db.Float)
+    centroid_lon = db.Column(db.Float)
