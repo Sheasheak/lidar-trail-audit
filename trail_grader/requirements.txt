@@ -21,3 +21,5 @@ pykml
 lxml
 rasterio
 Pillow
+imageio
+imageio-ffmpeg

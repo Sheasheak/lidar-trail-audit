@@ -550,13 +550,16 @@ def run_vision(run_id):
         return jsonify({'error': 'No API key set — enter one above, or add ANTHROPIC_API_KEY to .env and restart.'}), 400
 
     photos = request.files.getlist('photos')
-    if not photos:
-        return jsonify({'error': 'Choose at least one photo.'}), 400
+    video = request.files.get('video')
+    if not photos and not (video and video.filename):
+        return jsonify({'error': 'Choose at least one photo, or a video.'}), 400
     if len(photos) > MAX_VISION_PHOTOS:
         return jsonify({'error': f'Max {MAX_VISION_PHOTOS} photos per batch — try fewer at a time.'}), 400
 
     points = result.get('points_wgs84_dense') or []
+    trail_length_m = result.get('trail_length_m')
     findings = []
+
     for f in photos:
         name = (f.filename or 'photo').lower()
         if not name.endswith(('.jpg', '.jpeg', '.png')):
@@ -581,6 +584,49 @@ def run_vision(run_id):
             'filename': f.filename, 'chainage_m': chainage_m, 'lat': lat, 'lon': lon,
             'gps_found': gps is not None, **analysis,
         })
+
+    if video and video.filename:
+        name = video.filename.lower()
+        if not name.endswith(('.mp4', '.mov', '.m4v', '.webm', '.avi')):
+            findings.append({'filename': video.filename, 'chainage_m': None,
+                             'error': 'Not a recognised video format — skipped.'})
+        else:
+            # No per-frame GPS (see extract_video_frames) — if the uploader
+            # gives a start/end chainage for the whole clip, interpolate
+            # each frame's position linearly between them by how far
+            # through the video it falls. Left blank, frames just get no
+            # chainage, same as a photo with no GPS.
+            def _parse_m(key):
+                try:
+                    v = float(request.form.get(key, ''))
+                except (TypeError, ValueError):
+                    return None
+                return max(0.0, min(v, trail_length_m)) if trail_length_m else v
+            start_m, end_m = _parse_m('video_start_m'), _parse_m('video_end_m')
+
+            try:
+                frames = gv11.extract_video_frames(video.read(), filename_hint=video.filename,
+                                                   max_frames=MAX_VISION_PHOTOS)
+            except Exception as e:
+                traceback.print_exc()
+                frames = []
+                findings.append({'filename': video.filename, 'chainage_m': None,
+                                 'error': f'Could not read that video: {e}'})
+
+            for i, (jpeg_bytes, fraction) in enumerate(frames):
+                chainage_m = None
+                if start_m is not None and end_m is not None:
+                    chainage_m = round(start_m + fraction * (end_m - start_m))
+                analysis = analyze_trail_photo(jpeg_bytes, media_type='image/jpeg', api_key=api_key)
+                label = f"{video.filename} @ {round(fraction * 100)}%"
+                if analysis is None:
+                    findings.append({'filename': label, 'chainage_m': chainage_m,
+                                     'error': 'Analysis failed — see server console.'})
+                    continue
+                findings.append({
+                    'filename': label, 'chainage_m': chainage_m, 'lat': None, 'lon': None,
+                    'gps_found': False, **analysis,
+                })
 
     result.setdefault('vision_findings', []).extend(findings)
     return jsonify({'findings': findings})

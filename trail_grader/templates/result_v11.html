@@ -192,19 +192,41 @@
   <section class="card" id="vision-card" style="margin-top:24px">
     <h3>AI trail camera <span class="roadmap-badge" style="display:inline-block;font-family:var(--font-mono);font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-3);border:1px solid var(--rule);border-radius:4px;padding:2px 7px;vertical-align:middle;margin-left:6px">Prototype</span></h3>
     <p class="card-sub">
-      LiDAR can't see roots, loose rock, jump lips or surface condition. Upload geotagged photos from the
-      trail (phone photos with location on) and each one gets matched to its nearest chainage and checked
-      by Claude for hazards worth flagging. This is the realistic near-term path from the
-      <a href="{{ url_for('roadmap_vision') }}">AI trail camera roadmap</a> — sampling individual photos
-      through an existing model, not the custom-trained production pipeline documented there. Photos
-      without GPS data still get analysed, just without a chainage position.
+      LiDAR can't see roots, loose rock, jump lips or surface condition. Upload geotagged photos or a
+      trail-ride video and each frame gets checked by Claude for hazards worth flagging. This is the
+      realistic near-term path from the <a href="{{ url_for('roadmap_vision') }}">AI trail camera
+      roadmap</a> — sampling individual frames through an existing model, not the custom-trained
+      production pipeline documented there.
     </p>
     <div class="formgrid" style="margin-top:14px">
       <div class="fieldrow">
         <label for="vision-photos">Photos (JPEG/PNG, up to {{ 6 }} at a time)</label>
         <input type="file" id="vision-photos" accept="image/jpeg,image/png" multiple>
+        <span class="hint">Matched to chainage automatically via GPS EXIF, if the photo has it — otherwise analysed with no position.</span>
       </div>
-      <button type="button" class="ghost" id="vision-btn" style="width:fit-content">Analyse photos</button>
+      <fieldset>
+        <legend class="legendlabel">Or a video</legend>
+        <div class="choice" style="gap:10px">
+          <input type="file" id="vision-video" accept="video/mp4,video/quicktime,video/webm,video/x-msvideo" style="padding:9px 11px">
+          <span class="hint">
+            Up to {{ 6 }} evenly-spaced frames get pulled from the clip and analysed. Videos don't carry
+            usable per-frame GPS the way a photo's EXIF does, so there's no automatic chainage — optionally
+            tell it roughly where the clip starts/ends on the trail and each frame's position is
+            interpolated between them; leave blank and frames are analysed with no position.
+          </span>
+          <div class="pairs">
+            <div class="fieldrow">
+              <label for="vision-start-m">Starts at (m)</label>
+              <input type="number" id="vision-start-m" min="0" step="1" placeholder="e.g. 0">
+            </div>
+            <div class="fieldrow">
+              <label for="vision-end-m">Ends at (m)</label>
+              <input type="number" id="vision-end-m" min="0" step="1" placeholder="e.g. {{ r.trail_length_m|round|int }}">
+            </div>
+          </div>
+        </div>
+      </fieldset>
+      <button type="button" class="ghost" id="vision-btn" style="width:fit-content">Analyse</button>
       <p class="hint mono" id="vision-status" style="color:var(--ink-3);font-size:11px"></p>
     </div>
     <table class="flags" id="vision-table" style="margin-top:16px;{{ '' if r.vision_findings else 'display:none' }}">
@@ -426,18 +448,28 @@ document.getElementById('vision-btn').addEventListener('click', async () => {
   const btn = document.getElementById('vision-btn');
   const status = document.getElementById('vision-status');
   const fileInput = document.getElementById('vision-photos');
+  const videoInput = document.getElementById('vision-video');
+  const startInput = document.getElementById('vision-start-m');
+  const endInput = document.getElementById('vision-end-m');
   const table = document.getElementById('vision-table');
   const tbody = document.getElementById('vision-tbody');
   const files = fileInput.files;
-  if (!files.length) { status.textContent = 'Choose at least one photo.'; return; }
+  const video = videoInput.files[0];
+  if (!files.length && !video) { status.textContent = 'Choose at least one photo, or a video.'; return; }
 
   const fd = new FormData();
   for (const f of files) fd.append('photos', f);
+  if (video) {
+    fd.append('video', video);
+    if (startInput.value !== '') fd.append('video_start_m', startInput.value);
+    if (endInput.value !== '') fd.append('video_end_m', endInput.value);
+  }
   const apiKey = apiKeyInput.value.trim();
   if (apiKey) fd.append('api_key', apiKey);
 
   btn.disabled = true;
-  status.textContent = `Analysing ${files.length} photo${files.length === 1 ? '' : 's'}…`;
+  status.textContent = video ? 'Extracting and analysing video frames — this can take a minute…'
+    : `Analysing ${files.length} photo${files.length === 1 ? '' : 's'}…`;
   try {
     const resp = await fetch("{{ url_for('run_vision', run_id=run_id) }}", { method: 'POST', body: fd });
     const data = await resp.json();
@@ -456,6 +488,9 @@ document.getElementById('vision-btn').addEventListener('click', async () => {
     }
     table.style.display = '';
     fileInput.value = '';
+    videoInput.value = '';
+    startInput.value = '';
+    endInput.value = '';
   } catch (e) {
     status.textContent = 'Request failed: ' + e;
   } finally {

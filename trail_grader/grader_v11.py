@@ -422,6 +422,64 @@ def nearest_chainage(points_wgs84_dense, lat, lon):
     return best_i
 
 
+def extract_video_frames(video_bytes, filename_hint="clip.mp4", max_frames=6):
+    """Evenly-spaced JPEG frames from an uploaded video, via imageio's
+    bundled ffmpeg (imageio-ffmpeg ships its own static binary — works the
+    same in production as it does locally, no system ffmpeg package
+    needed). Frame count is capped regardless of video length by scaling
+    the sampling interval to the clip's own duration, not a fixed seconds
+    value, which also keeps Claude vision call count (cost/time) bounded.
+
+    No per-frame GPS: that would mean parsing GPMF (GoPro) or similar
+    embedded telemetry, a genuinely hard binary format — exactly the
+    "accuracy/drift correction" open question already flagged on
+    /roadmap/vision. Caller interpolates chainage from a start/end metre
+    range instead, if given (see run_vision's video_start_m/video_end_m).
+
+    Returns a list of (jpeg_bytes, fraction_through_video) tuples.
+    Writes to a real temp file rather than decoding from bytes in memory —
+    imageio's ffmpeg plugin needs a seekable path, and decoding one frame
+    at a time (not the whole video) keeps peak memory close to a single
+    frame's size regardless of clip length."""
+    import io as _io
+    import os as _os
+    import tempfile
+
+    import imageio.v3 as iio
+    from PIL import Image
+
+    suffix = _os.path.splitext(filename_hint)[1] or ".mp4"
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+            tmp.write(video_bytes)
+            tmp_path = tmp.name
+
+        meta = iio.immeta(tmp_path, plugin="FFMPEG")
+        duration_s = meta.get("duration") or 0
+        fps = meta.get("fps") or 25
+        if not duration_s:
+            raise ValueError("Could not read that video's duration — is it a valid video file?")
+
+        n_frames = min(max_frames, max(1, int(duration_s)))
+        timestamps = [duration_s * (i + 0.5) / n_frames for i in range(n_frames)]
+
+        results = []
+        for t in timestamps:
+            try:
+                arr = iio.imread(tmp_path, plugin="FFMPEG", index=int(t * fps))
+            except Exception:
+                continue
+            img = Image.fromarray(arr)
+            buf = _io.BytesIO()
+            img.save(buf, format="JPEG", quality=80)
+            results.append((buf.getvalue(), t / duration_s if duration_s else 0.0))
+        return results
+    finally:
+        if tmp_path and _os.path.exists(tmp_path):
+            _os.remove(tmp_path)
+
+
 def bearing(p1, p2):
     return math.atan2(p2[1] - p1[1], p2[0] - p1[0])
 
