@@ -228,6 +228,14 @@ def index():
     return render_template('versions.html')
 
 
+@app.route('/current')
+def current():
+    """The marketing landing page — what the tool is and what's coming
+    next — for the "Current version" branch off the / picker, rather than
+    dropping straight into the editor."""
+    return render_template('landing.html')
+
+
 @app.route('/editor')
 def editor():
     return render_template('editor.html')
