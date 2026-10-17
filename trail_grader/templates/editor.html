@@ -138,6 +138,17 @@
 
   <div class="grp">
     <h2>Finish</h2>
+    <label class="row" style="display:block;margin-bottom:10px">
+      Signposted grade
+      <select id="statedGrade" style="width:100%;padding:6px;margin-top:4px;font-size:13px;border:1px solid var(--rule);border-radius:4px;background:var(--surface-2);color:var(--ink)">
+        <option value="1">Grade 1 — Green (Easiest)</option>
+        <option value="2">Grade 2 — Green (Easy)</option>
+        <option value="3">Grade 3 — Light Blue (Intermediate)</option>
+        <option value="4" selected>Grade 4 — Dark Blue (Advanced)</option>
+        <option value="5">Grade 5 — Black (Expert)</option>
+        <option value="6">Grade 6 — Double Black (Extreme)</option>
+      </select>
+    </label>
     <button id="doneBtn">Done — grade this trail →</button>
     <div class="hint">Sends the corrected line straight to the grader below.</div>
   </div>
@@ -337,7 +348,8 @@ document.getElementById("doneBtn").onclick = () => {
   fileInput.files = dt.files;
   form.appendChild(fileInput);
 
-  const fields = { source: "upload", trail_name: "Corrected trail", stated_grade: "4", want_sideslope: "1" };
+  const statedGrade = document.getElementById("statedGrade").value;
+  const fields = { source: "upload", trail_name: "Corrected trail", stated_grade: statedGrade, want_sideslope: "1" };
   if (customDemId) fields.dem_id = customDemId;
   for (const [name, value] of Object.entries(fields)) {
     const input = document.createElement("input");

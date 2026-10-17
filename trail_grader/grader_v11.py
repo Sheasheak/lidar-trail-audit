@@ -886,7 +886,12 @@ def render_folium_map(result):
     # "how steep is this bit", and needs to read as obviously different, not
     # just another shade of red. Thick + dashed + a marker at the midpoint
     # of each run so it's still visible zoomed out, not just as a thin line. ----
-    exceed_layer = folium.FeatureGroup(name="Out-of-grade sections", show=True)
+    # control=False: keep it out of the generic LayerControl dropdown (which
+    # already lists Gradient/Sideslope/Turn radius) — this gets its own
+    # dedicated on-map button below instead of being one more checkbox
+    # buried in a menu, since this is the one layer that answers "where
+    # does this fail its signposted grade" and should be a single click.
+    exceed_layer = folium.FeatureGroup(name="Out-of-grade sections", show=True, control=False)
 
     def _add_exceed_runs(runs, colour, label, unit):
         for run in runs:
@@ -913,6 +918,45 @@ def render_folium_map(result):
     folium.Marker(location=[pts[-1][1], pts[-1][0]], tooltip="Finish",
                   icon=folium.Icon(color="red", icon="stop")).add_to(m)
     folium.LayerControl().add_to(m)
+
+    # Standalone button (not the LayerControl checkbox above) purely for
+    # exceed_layer — one click, no dropdown, since this is the layer DOC
+    # actually needs on every run.
+    exceed_toggle_js = f"""
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {{
+        var map = {m.get_name()};
+        var exceedLayer = {exceed_layer.get_name()};
+        var ExceedToggle = L.Control.extend({{
+            options: {{ position: 'topleft' }},
+            onAdd: function() {{
+                var btn = L.DomUtil.create('button');
+                btn.id = 'exceed-toggle-btn';
+                var on = true;
+                function render() {{
+                    btn.textContent = (on ? 'Hide' : 'Show') + ' out-of-grade sections';
+                    btn.style.cssText = 'font: 13px/1 -apple-system,Segoe UI,sans-serif; font-weight: 700;'
+                        + 'padding: 8px 12px; border: 0; border-radius: 4px; cursor: pointer;'
+                        + 'box-shadow: 0 1px 4px rgba(0,0,0,0.4); margin: 10px;'
+                        + (on ? 'background:#ff00ff; color:#fff;' : 'background:#888; color:#fff;');
+                }}
+                render();
+                L.DomEvent.on(btn, 'click', function(e) {{
+                    L.DomEvent.stopPropagation(e);
+                    if (on) {{ map.removeLayer(exceedLayer); }} else {{ map.addLayer(exceedLayer); }}
+                    on = !on;
+                    render();
+                }});
+                L.DomEvent.disableClickPropagation(btn);
+                return btn;
+            }}
+        }});
+        map.addControl(new ExceedToggle());
+    }});
+    </script>
+    """
+    m.get_root().html.add_child(folium.Element(exceed_toggle_js))
+
     return m.get_root().render()
 
 
