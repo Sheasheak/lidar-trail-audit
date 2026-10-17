@@ -441,6 +441,50 @@ def _exceedance_runs(stations_values, station_step, is_bad, worse):
     return runs
 
 
+def merge_out_of_grade_sections(gradient_exceedances, radius_exceedances, sideslope_exceedances):
+    """Collapse the three separate gradient/radius/sideslope run lists into
+    one physical-chainage view — DOC and inspectors think in terms of "this
+    stretch of trail is a problem", not which specific metric tripped it.
+    Each run's [start_m, start_m+length_m) already accounts for its own
+    sampling step (1 m for gradient/radius, 5 m for sideslope), so merging
+    on that physical extent — rather than raw start_m/end_m, which use
+    different step conventions — keeps the combined lengths honest."""
+    tagged = []
+    for r in gradient_exceedances:
+        tagged.append((r["start_m"], r["start_m"] + r["length_m"], "gradient", r["peak"]))
+    for r in radius_exceedances:
+        tagged.append((r["start_m"], r["start_m"] + r["length_m"], "radius", r["peak"]))
+    for r in sideslope_exceedances:
+        tagged.append((r["start_m"], r["start_m"] + r["length_m"], "sideslope", r["peak_deg"]))
+    tagged.sort(key=lambda t: t[0])
+
+    worse = {
+        "gradient": lambda a, b: a if abs(a) >= abs(b) else b,
+        "radius": min,
+        "sideslope": lambda a, b: a if abs(a) >= abs(b) else b,
+    }
+    label = {
+        "gradient": lambda v: f"Gradient {v}%",
+        "radius": lambda v: f"Turn radius {v} m",
+        "sideslope": lambda v: f"Sideslope {v}°",
+    }
+
+    merged = []
+    for start, end, kind, peak in tagged:
+        if merged and start <= merged[-1]["end"]:
+            merged[-1]["end"] = max(merged[-1]["end"], end)
+            merged[-1]["peaks"][kind] = worse[kind](merged[-1]["peaks"].get(kind, peak), peak)
+        else:
+            merged.append({"start": start, "end": end, "peaks": {kind: peak}})
+
+    return [{
+        "start_m": round(m["start"]),
+        "end_m": round(m["end"]),
+        "length_m": round(m["end"] - m["start"], 1),
+        "reasons": [{"kind": kind, "label": label[kind](peak)} for kind, peak in m["peaks"].items()],
+    } for m in merged]
+
+
 def circumradius(p1, p2, p3):
     (ax, ay), (bx, by), (cx, cy) = p1, p2, p3
     a, b, c = math.dist(p1, p2), math.dist(p2, p3), math.dist(p1, p3)
@@ -748,6 +792,11 @@ def run_audit(kml_bytes, trail_name="Trail", stated_grade=4, progress=None, want
     sideslope_out_length_m = round(sum(r["length_m"] for r in sideslope_exceedances), 1)
     sideslope_out_pct = round(sideslope_out_length_m / line.length * 100, 1) if line.length else 0.0
 
+    out_of_grade_sections = merge_out_of_grade_sections(
+        gradient_exceedances, radius_exceedances, sideslope_exceedances)
+    out_of_grade_length_m = round(sum(s["length_m"] for s in out_of_grade_sections), 1)
+    out_of_grade_pct = round(out_of_grade_length_m / line.length * 100, 1) if line.length else 0.0
+
     # ---- gradient profile (matplotlib PNG) ----
     note("Drawing charts…")
     abs_limit = stated_abs_limit  # same value, computed earlier alongside gradient_exceedances
@@ -823,6 +872,9 @@ def run_audit(kml_bytes, trail_name="Trail", stated_grade=4, progress=None, want
         "sideslope_exceedances": sideslope_exceedances,
         "sideslope_out_length_m": sideslope_out_length_m,
         "sideslope_out_pct": sideslope_out_pct,
+        "out_of_grade_sections": out_of_grade_sections,
+        "out_of_grade_length_m": out_of_grade_length_m,
+        "out_of_grade_pct": out_of_grade_pct,
         "steep_sideslope_deg": STEEP_SIDESLOPE_DEG,
         "trail_length_m": round(line.length, 1),
         "points_wgs84_dense": points_wgs84_dense,

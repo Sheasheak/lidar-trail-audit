@@ -47,79 +47,42 @@
   <!-- ================= OUT-OF-GRADE SECTIONS ================= -->
   <section class="card" id="exceed-card" style="margin-top:14px">
     <h3>Out-of-grade sections — vs stated Grade {{ r.stated_grade }}</h3>
-    <p class="card-sub">Where the trail fails the <em>signposted</em> grade's own gradient/radius limits, not the
-      measured grade — this is what decides whether the current sign is still defensible. The guidelines cap how
-      much of a track's length can be out before it needs re-signposting, regrading, or realigning.</p>
-    <div class="checkrow" style="border-top:0;padding-top:0;flex-direction:column;align-items:flex-start;gap:10px">
-      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-        <span class="{{ 'fail' if r.gradient_out_pct > r.gradient_tolerance_pct else '' }}">
-          Gradient: {{ r.gradient_out_length_m }} m out of grade
-          ({{ r.gradient_out_pct }}% of trail — tolerance {{ r.gradient_tolerance_pct }}%)
-        </span>
-        {% if r.gradient_exceedances %}
-        <button type="button" class="ghost toggle-btn" data-target="gradient-sections" aria-pressed="false">
-          Show {{ r.gradient_exceedances|length }} section{{ 's' if r.gradient_exceedances|length != 1 else '' }}
-        </button>
-        {% endif %}
-      </div>
-      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-        <span class="{{ 'fail' if r.radius_out_pct > r.radius_tolerance_pct else '' }}">
-          Turn radius: {{ r.radius_out_length_m }} m out of grade
-          ({{ r.radius_out_pct }}% of trail — tolerance {{ r.radius_tolerance_pct }}%)
-        </span>
-        {% if r.radius_exceedances %}
-        <button type="button" class="ghost toggle-btn" data-target="radius-sections" aria-pressed="false">
-          Show {{ r.radius_exceedances|length }} section{{ 's' if r.radius_exceedances|length != 1 else '' }}
-        </button>
-        {% endif %}
-      </div>
-      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-        <span>
-          Sideslope: {{ r.sideslope_out_length_m }} m at or above {{ r.steep_sideslope_deg }}°
-          ({{ r.sideslope_out_pct }}% of trail — exposure, not a guideline grade limit)
-        </span>
-        {% if r.sideslope_exceedances %}
-        <button type="button" class="ghost toggle-btn" data-target="sideslope-sections" aria-pressed="false">
-          Show {{ r.sideslope_exceedances|length }} section{{ 's' if r.sideslope_exceedances|length != 1 else '' }}
-        </button>
-        {% endif %}
-      </div>
+    <p class="card-sub">Actual stretches of the trail that fail the <em>signposted</em> grade, not the measured
+      grade — this is what decides whether the current sign is still defensible. Each section lists every reason
+      it's flagged, whether that's gradient, turn radius, steep sideslope, or more than one at once.</p>
+
+    <div class="checkrow" style="border-top:0;padding-top:0">
+      <span class="{{ 'fail' if r.gradient_out_pct > r.gradient_tolerance_pct else '' }}">
+        Gradient {{ r.gradient_out_pct }}% (tolerance {{ r.gradient_tolerance_pct }}%)
+      </span>
+      <span class="{{ 'fail' if r.radius_out_pct > r.radius_tolerance_pct else '' }}">
+        Turn radius {{ r.radius_out_pct }}% (tolerance {{ r.radius_tolerance_pct }}%)
+      </span>
+      <span>Sideslope {{ r.sideslope_out_pct }}% ≥{{ r.steep_sideslope_deg }}° (exposure, no guideline limit)</span>
     </div>
 
-    {% if r.gradient_exceedances %}
-    <table class="flags" id="gradient-sections" style="display:none;margin-top:16px">
-      <caption style="text-align:left;font-size:12px;color:var(--ink-3);margin-bottom:6px">Gradient — out-of-grade sections</caption>
-      <thead><tr><th scope="col">Chainage</th><th scope="col">Length</th><th scope="col">Peak gradient</th></tr></thead>
+    {% if r.out_of_grade_sections %}
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:16px">
+      <span>{{ r.out_of_grade_length_m }} m of trail out of grade ({{ r.out_of_grade_pct }}% of its length)</span>
+      <button type="button" class="ghost toggle-btn" data-target="out-of-grade-sections" aria-pressed="false">
+        Show {{ r.out_of_grade_sections|length }} section{{ 's' if r.out_of_grade_sections|length != 1 else '' }}
+      </button>
+    </div>
+    <table class="flags" id="out-of-grade-sections" style="display:none;margin-top:16px">
+      <caption style="text-align:left;font-size:12px;color:var(--ink-3);margin-bottom:6px">Out-of-grade sections, merged by chainage</caption>
+      <thead><tr><th scope="col">Chainage</th><th scope="col">Length</th><th scope="col">Why</th></tr></thead>
       <tbody>
-        {% for run in r.gradient_exceedances %}
-        <tr><td>{{ run.start_m }}–{{ run.end_m }} m</td><td>{{ run.length_m }} m</td><td>{{ run.peak }}%</td></tr>
+        {% for s in r.out_of_grade_sections %}
+        <tr>
+          <td>{{ s.start_m }}–{{ s.end_m }} m</td>
+          <td>{{ s.length_m }} m</td>
+          <td>{% for reason in s.reasons %}{{ reason.label }}{% if not loop.last %}, {% endif %}{% endfor %}</td>
+        </tr>
         {% endfor %}
       </tbody>
     </table>
-    {% endif %}
-
-    {% if r.radius_exceedances %}
-    <table class="flags" id="radius-sections" style="display:none;margin-top:16px">
-      <caption style="text-align:left;font-size:12px;color:var(--ink-3);margin-bottom:6px">Turn radius — out-of-grade sections</caption>
-      <thead><tr><th scope="col">Chainage</th><th scope="col">Length</th><th scope="col">Tightest radius</th></tr></thead>
-      <tbody>
-        {% for run in r.radius_exceedances %}
-        <tr><td>{{ run.start_m }}–{{ run.end_m }} m</td><td>{{ run.length_m }} m</td><td>{{ run.peak }} m</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% endif %}
-
-    {% if r.sideslope_exceedances %}
-    <table class="flags" id="sideslope-sections" style="display:none;margin-top:16px">
-      <caption style="text-align:left;font-size:12px;color:var(--ink-3);margin-bottom:6px">Sideslope — sections at or above {{ r.steep_sideslope_deg }}°</caption>
-      <thead><tr><th scope="col">Chainage</th><th scope="col">Length</th><th scope="col">Peak sideslope</th></tr></thead>
-      <tbody>
-        {% for run in r.sideslope_exceedances %}
-        <tr><td>{{ run.start_m }}–{{ run.end_m }} m</td><td>{{ run.length_m }} m</td><td>{{ run.peak_deg }}°</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    {% else %}
+    <p style="margin-top:16px;color:var(--ink-2);font-size:13.5px">No out-of-grade sections found.</p>
     {% endif %}
   </section>
 
