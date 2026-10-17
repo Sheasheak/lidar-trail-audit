@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+<title>Organisation — TrailSafe</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='audit.css') }}">
+</head>
+<body>
+<div class="sheet" style="max-width:520px">
+
+  <header class="titleblock">
+    <p class="eyebrow"><span>TrailSafe</span><span>Organisation</span><a href="{{ url_for('auth.account') }}" style="margin-left:auto">← My account</a></p>
+    {% if current_user.organization %}
+    <h1>{{ current_user.organization.name }}</h1>
+    <p class="subtitle">
+      Everyone in this organisation sees and can manage every trail anyone saves — one shared map
+      and history instead of separate accounts.
+    </p>
+    {% else %}
+    <h1>Join or start an organisation</h1>
+    <p class="subtitle">
+      Everyone who enters the same name and code ends up in the same organisation, sharing one
+      map and history of saved trails instead of each having their own. First person in sets the
+      code; share it with your team to bring them in.
+    </p>
+    {% endif %}
+  </header>
+
+  {% if error %}
+  <div class="errorbox" role="alert"><b>Couldn't do that</b>{{ error }}</div>
+  {% endif %}
+
+  {% if current_user.organization %}
+  <div class="card" style="margin-top:20px">
+    <h3>Share code</h3>
+    <p class="card-sub">Give teammates this name and code to join — they enter them at <code>/organisation</code> themselves.</p>
+    <dl class="fields">
+      <div class="field"><dt>Name</dt><dd>{{ current_user.organization.name }}</dd></div>
+      <div class="field"><dt>Code</dt><dd class="mono">{{ current_user.organization.code }}</dd></div>
+    </dl>
+  </div>
+  <form method="post" action="{{ url_for('auth.leave_organisation') }}" style="margin-top:16px">
+    <button type="submit" class="ghost">Leave organisation</button>
+  </form>
+  {% else %}
+  <form method="post" action="{{ url_for('auth.organisation') }}" style="margin-top:24px">
+    <div class="formgrid">
+      <div class="fieldrow">
+        <label for="name">Organisation name</label>
+        <input type="text" id="name" name="name" value="{{ name or '' }}" required autofocus>
+      </div>
+      <div class="fieldrow">
+        <label for="code">Code</label>
+        <input type="text" id="code" name="code" required>
+        <span class="hint">New name → this sets the code. Existing name → this must match.</span>
+      </div>
+      <button type="submit" class="primary">Join or create</button>
+    </div>
+  </form>
+  {% endif %}
+
+</div>
+</body>
+</html>

@@ -13,6 +13,24 @@ from werkzeug.security import check_password_hash, generate_password_hash
 db = SQLAlchemy()
 
 
+class Organization(db.Model):
+    """A shared workspace: members see and can manage each other's saved
+    runs on one map/history list. Joining is a shared name+code pair rather
+    than per-person invites — simplest thing that works for a small trusted
+    team (e.g. DOC staff), picked over invite links or email-domain
+    matching for that reason. The code is a shared team passphrase, not a
+    per-user secret, so it's stored and compared in plain text — not
+    hashed, same trust model as a wifi password, not a login credential."""
+    __tablename__ = 'organizations'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(255), unique=True, nullable=False, index=True)
+    code = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    members = db.relationship('User', backref='organization', lazy='dynamic')
+
+
 class User(UserMixin, db.Model):
     __tablename__ = 'users'
 
@@ -20,6 +38,7 @@ class User(UserMixin, db.Model):
     email = db.Column(db.String(255), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    organization_id = db.Column(db.Integer, db.ForeignKey('organizations.id'), nullable=True, index=True)
 
     runs = db.relationship('SavedRun', backref='user', lazy='dynamic',
                             order_by='SavedRun.run_at.desc()', cascade='all, delete-orphan')
@@ -32,6 +51,13 @@ class User(UserMixin, db.Model):
 
 
 class SavedRun(db.Model):
+    """No organization_id here on purpose: who can see a run is derived
+    live from the owner's *current* User.organization_id (see
+    auth._visible_runs), not stamped at save time. That means joining an
+    org immediately shares all of that member's past saves with the team
+    too, not just ones saved after joining — and leaving stops sharing
+    them immediately, rather than needing a backfill/cleanup step either
+    way."""
     __tablename__ = 'saved_runs'
 
     id = db.Column(db.Integer, primary_key=True)

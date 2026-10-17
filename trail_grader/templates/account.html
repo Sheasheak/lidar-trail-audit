@@ -15,10 +15,17 @@
   <header class="titleblock">
     <p class="eyebrow">
       <span>TrailSafe</span><span>My account</span>
+      <a href="{{ url_for('auth.organisation') }}">
+        {% if current_user.organization %}Organisation: {{ current_user.organization.name }} →{% else %}Join an organisation →{% endif %}
+      </a>
       <a href="{{ url_for('current') }}" style="margin-left:auto">← Home</a>
     </p>
     <h1>{{ current_user.email }}</h1>
+    {% if current_user.organization %}
+    <p class="subtitle">Every trail anyone in <strong>{{ current_user.organization.name }}</strong> has graded while signed in, newest first.</p>
+    {% else %}
     <p class="subtitle">Every trail you've graded while signed in, newest first.</p>
+    {% endif %}
     <form method="post" action="{{ url_for('auth.logout') }}" style="margin-top:4px">
       <button type="submit" class="ghost">Sign out</button>
     </form>
@@ -44,6 +51,7 @@
       <thead>
         <tr>
           <th scope="col">Trail</th>
+          {% if current_user.organization %}<th scope="col">Saved by</th>{% endif %}
           <th scope="col">Run</th>
           <th scope="col">Grade</th>
           <th scope="col">Length</th>
@@ -62,6 +70,7 @@
               <button type="submit" class="ghost" style="padding:5px 9px;font-size:12px">Rename</button>
             </form>
           </td>
+          {% if current_user.organization %}<td class="mono">{{ run.user.email }}</td>{% endif %}
           <td class="mono">{{ run.run_at.strftime('%d %b %Y, %H:%M') }}</td>
           <td>
             {% if run.overall_grade %}
@@ -109,7 +118,8 @@ RUNS_GEO.forEach(r => {
   const lengthText = r.length_m ? Math.round(r.length_m) + ' m' : '';
   const popupHtml =
     '<b>' + r.trail_name.replace(/</g, '&lt;') + '</b><br>' +
-    gradeText + (lengthText ? ' · ' + lengthText : '') + '<br>' +
+    gradeText + (lengthText ? ' · ' + lengthText : '') +
+    (r.saved_by ? '<br><span style="opacity:0.7">saved by ' + r.saved_by.replace(/</g, '&lt;') + '</span>' : '') + '<br>' +
     '<form method="post" action="/account/rerun/' + r.id + '" style="margin-top:6px">' +
     '<button type="submit">View →</button></form>';
 
