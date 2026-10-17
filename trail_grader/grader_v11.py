@@ -878,6 +878,36 @@ def render_folium_map(result):
                              tooltip=f"{idx} m — turn radius {r:.1f} m").add_to(radius_layer)
     radius_layer.add_to(m)
 
+    # ---- out-of-grade sections — a dedicated, high-contrast layer, drawn
+    # last so it sits on top of the continuous gradient/sideslope colouring.
+    # The colour ramps above already use green-through-red for severity, so
+    # this deliberately uses colours outside that ramp (magenta, cyan) —
+    # "out of grade against what's signposted" is a different question from
+    # "how steep is this bit", and needs to read as obviously different, not
+    # just another shade of red. Thick + dashed + a marker at the midpoint
+    # of each run so it's still visible zoomed out, not just as a thin line. ----
+    exceed_layer = folium.FeatureGroup(name="Out-of-grade sections", show=True)
+
+    def _add_exceed_runs(runs, colour, label, unit):
+        for run in runs:
+            lo, hi = max(0, run["start_m"]), min(len(pts) - 1, run["end_m"])
+            seg = pts[lo:hi + 1]
+            if len(seg) < 2:
+                continue
+            tip = (f"OUT OF GRADE — {label}: {run['start_m']}-{run['end_m']} m "
+                   f"({run['length_m']} m), peak {run['peak']}{unit}")
+            folium.PolyLine(locations=[[lat, lon] for lon, lat in seg],
+                             color=colour, weight=9, opacity=0.95, dash_array="6,8",
+                             tooltip=tip).add_to(exceed_layer)
+            mid_lon, mid_lat = seg[len(seg) // 2]
+            folium.CircleMarker(location=[mid_lat, mid_lon], radius=6, color=colour,
+                                 fill=True, fill_opacity=1.0, weight=2,
+                                 tooltip=tip).add_to(exceed_layer)
+
+    _add_exceed_runs(result.get("gradient_exceedances", []), "#ff00ff", "gradient", "%")
+    _add_exceed_runs(result.get("radius_exceedances", []), "#00e5ff", "turn radius", " m")
+    exceed_layer.add_to(m)
+
     folium.Marker(location=[pts[0][1], pts[0][0]], tooltip="Start",
                   icon=folium.Icon(color="green", icon="play")).add_to(m)
     folium.Marker(location=[pts[-1][1], pts[-1][0]], tooltip="Finish",
