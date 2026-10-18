@@ -805,7 +805,7 @@ def run_audit(kml_bytes, trail_name="Trail", stated_grade=4, progress=None, want
         rise = elevations_dense[i] - elevations_dense[i - 1]
         gradients_dense.append((rise / run * 100) if run > 0 else 0.0)
 
-    window = 50
+    window = 100
     smoothed_dense = np.convolve(gradients_dense, np.ones(window) / window, mode="valid")
 
     avg_gradient = abs(np.mean(smoothed_dense))
@@ -1160,6 +1160,17 @@ def render_folium_map(result):
         var sideslopeLayer = {sideslope_exceed_layer.get_name()};
         var fieldNotesLayer = {field_notes_layer.get_name()};
         var trailName = {json.dumps(result.get("trail_name", "Trail"))};
+        var TRAIL_LATLNGS = {json.dumps([[lat, lon] for lon, lat in pts])};
+        var FIELD_NOTE_SNAP_M = 20;
+
+        function distToTrail(latlng) {{
+            var best = Infinity;
+            for (var i = 0; i < TRAIL_LATLNGS.length; i++) {{
+                var d = latlng.distanceTo(TRAIL_LATLNGS[i]);
+                if (d < best) best = d;
+            }}
+            return best;
+        }}
 
         function makeToggleControl(layer, colourOn, labelOn, labelOff) {{
             return L.Control.extend({{
@@ -1271,6 +1282,10 @@ def render_folium_map(result):
 
         map.on('click', function(e) {{
             if (!addingNote) return;
+            if (distToTrail(e.latlng) > FIELD_NOTE_SNAP_M) {{
+                alert('That\\'s too far from the trail line — field notes can only be added on the trail (within ' + FIELD_NOTE_SNAP_M + ' m).');
+                return;
+            }}
             var label = window.prompt('What did you see here? (e.g. "loose rock on tread", "root ball", "jump needs maintenance")');
             if (!label) return;
             var marker = L.marker(e.latlng, {{ icon: fieldNoteIcon() }})
