@@ -322,6 +322,34 @@ def roadmap_vision():
     return render_template('roadmap_vision.html')
 
 
+SITEMAP_PAGES = ['/current', '/grade', '/editor', '/batch', '/roadmap/vision']
+
+
+@app.route('/robots.txt')
+def robots_txt():
+    """Keep crawlers off account/auth pages and the archived /legacy build
+    (same grading tool, would otherwise compete with /current for ranking)."""
+    lines = [
+        'User-agent: *',
+        'Disallow: /account',
+        'Disallow: /login',
+        'Disallow: /signup',
+        'Disallow: /organisation',
+        'Disallow: /legacy/',
+        '',
+        'Sitemap: https://trailsafe.nz/sitemap.xml',
+    ]
+    return Response('\n'.join(lines), mimetype='text/plain')
+
+
+@app.route('/sitemap.xml')
+def sitemap_xml():
+    urls = ''.join(f'<url><loc>https://trailsafe.nz{p}</loc></url>' for p in SITEMAP_PAGES)
+    xml = ('<?xml version="1.0" encoding="UTF-8"?>'
+           f'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{urls}</urlset>')
+    return Response(xml, mimetype='application/xml')
+
+
 @app.route('/editor/terrain', methods=['POST'])
 @limiter.limit("30 per minute")
 def editor_terrain():

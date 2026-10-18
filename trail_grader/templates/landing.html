@@ -6,6 +6,33 @@
 <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
 <title>TrailSafe — Turning terrain into answers</title>
 <meta name="description" content="Automated mountain bike trail grading from LiDAR elevation data, graded against the NZ MTB Trail Design & Construction Guidelines.">
+<link rel="canonical" href="https://trailsafe.nz/current">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="TrailSafe">
+<meta property="og:title" content="TrailSafe — Turning terrain into answers">
+<meta property="og:description" content="Automated mountain bike trail grading from LiDAR elevation data, graded against the NZ MTB Trail Design & Construction Guidelines.">
+<meta property="og:url" content="https://trailsafe.nz/current">
+<meta property="og:image" content="https://trailsafe.nz{{ url_for('static', filename='photos/hero-jump.jpg') }}">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="TrailSafe — Turning terrain into answers">
+<meta name="twitter:description" content="Automated mountain bike trail grading from LiDAR elevation data, graded against the NZ MTB Trail Design & Construction Guidelines.">
+<meta name="twitter:image" content="https://trailsafe.nz{{ url_for('static', filename='photos/hero-jump.jpg') }}">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "TrailSafe",
+  "url": "https://trailsafe.nz/current",
+  "description": "Automated mountain bike trail grading from LiDAR elevation data, graded against the NZ MTB Trail Design & Construction Guidelines.",
+  "applicationCategory": "UtilitiesApplication",
+  "operatingSystem": "Any (web-based)",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "NZD" }
+}
+</script>
+
 <link rel="stylesheet" href="{{ url_for('static', filename='audit.css') }}">
 <style>
   /* The hero's full-bleed breakout below uses 100vw, which (unlike
