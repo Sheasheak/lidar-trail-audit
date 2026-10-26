@@ -209,18 +209,27 @@
         <div class="choice" style="gap:10px">
           <input type="file" id="vision-video" accept="video/mp4,video/quicktime,video/webm,video/x-msvideo" style="padding:9px 11px">
           <span class="hint">
-            Up to {{ 6 }} evenly-spaced frames get pulled from the clip and analysed. Videos don't carry
-            usable per-frame GPS the way a photo's EXIF does, so there's no automatic chainage — optionally
-            tell it roughly where the clip starts/ends on the trail and each frame's position is
-            interpolated between them; leave blank and frames are analysed with no position.
+            Up to {{ 6 }} evenly-spaced frames get pulled from the clip and analysed. The video itself has no
+            per-frame GPS — upload a GPX track from a phone/GPS app covering the same ride and each frame gets
+            matched to its real position by elapsed time, same as a geotagged photo. No GPX? Fall back to
+            telling it roughly where the clip starts/ends on the trail, interpolated linearly in between.
           </span>
+          <div class="fieldrow">
+            <label for="vision-gpx">GPX track (optional, recommended)</label>
+            <input type="file" id="vision-gpx" accept=".gpx,application/gpx+xml" style="padding:9px 11px">
+          </div>
+          <div class="fieldrow">
+            <label for="vision-gpx-offset">GPX start offset (s)</label>
+            <input type="number" id="vision-gpx-offset" step="1" placeholder="0">
+            <span class="hint">If recording started a few seconds before/after the GPX log — positive if the video started later.</span>
+          </div>
           <div class="pairs">
             <div class="fieldrow">
-              <label for="vision-start-m">Starts at (m)</label>
+              <label for="vision-start-m">Starts at (m) — only used without a GPX track</label>
               <input type="number" id="vision-start-m" min="0" step="1" placeholder="e.g. 0">
             </div>
             <div class="fieldrow">
-              <label for="vision-end-m">Ends at (m)</label>
+              <label for="vision-end-m">Ends at (m) — only used without a GPX track</label>
               <input type="number" id="vision-end-m" min="0" step="1" placeholder="e.g. {{ r.trail_length_m|round|int }}">
             </div>
           </div>
@@ -230,14 +239,16 @@
       <p class="hint mono" id="vision-status" style="color:var(--ink-3);font-size:11px"></p>
     </div>
     <table class="flags" id="vision-table" style="margin-top:16px;{{ '' if r.vision_findings else 'display:none' }}">
-      <thead><tr><th scope="col">Photo</th><th scope="col">Chainage</th><th scope="col">Finding</th><th scope="col">Severity</th></tr></thead>
+      <thead><tr><th scope="col">Photo</th><th scope="col">Chainage</th><th scope="col">Category</th><th scope="col">Finding</th><th scope="col">Severity</th><th scope="col">Recommendation</th></tr></thead>
       <tbody id="vision-tbody">
         {% for f in r.vision_findings or [] %}
         <tr>
           <td>{{ f.filename }}</td>
           <td>{% if f.chainage_m is not none %}{{ f.chainage_m }} m{% else %}—{% endif %}</td>
+          <td>{{ (f.category or '—')|replace('_', ' ') }}</td>
           <td>{% if f.error %}<span class="cause">{{ f.error }}</span>{% elif f.hazard_found %}{{ f.summary }}{% else %}No hazard noted{% endif %}</td>
           <td>{{ f.severity or '—' }}</td>
+          <td>{{ f.recommendation or '—' }}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -284,7 +295,7 @@
         <span style="color:#cc0000">dark red</span> &gt;45° — steeper cross-slope means more
         exposure and more benching/cut-fill needed to hold the tread.
       </p>
-      <iframe src="{{ url_for('run_map', run_id=run_id) }}"
+      <iframe id="map-frame" src="{{ url_for('run_map', run_id=run_id) }}"
               style="width:100%;height:640px;border:1px solid var(--hairline);display:block"
               title="Plan view map"></iframe>
     </div>
@@ -449,6 +460,8 @@ document.getElementById('vision-btn').addEventListener('click', async () => {
   const status = document.getElementById('vision-status');
   const fileInput = document.getElementById('vision-photos');
   const videoInput = document.getElementById('vision-video');
+  const gpxInput = document.getElementById('vision-gpx');
+  const offsetInput = document.getElementById('vision-gpx-offset');
   const startInput = document.getElementById('vision-start-m');
   const endInput = document.getElementById('vision-end-m');
   const table = document.getElementById('vision-table');
@@ -461,8 +474,13 @@ document.getElementById('vision-btn').addEventListener('click', async () => {
   for (const f of files) fd.append('photos', f);
   if (video) {
     fd.append('video', video);
-    if (startInput.value !== '') fd.append('video_start_m', startInput.value);
-    if (endInput.value !== '') fd.append('video_end_m', endInput.value);
+    if (gpxInput.files[0]) {
+      fd.append('gpx', gpxInput.files[0]);
+      if (offsetInput.value !== '') fd.append('video_gpx_offset_s', offsetInput.value);
+    } else {
+      if (startInput.value !== '') fd.append('video_start_m', startInput.value);
+      if (endInput.value !== '') fd.append('video_end_m', endInput.value);
+    }
   }
   const apiKey = apiKeyInput.value.trim();
   if (apiKey) fd.append('api_key', apiKey);
@@ -481,16 +499,37 @@ document.getElementById('vision-btn').addEventListener('click', async () => {
     for (const f of data.findings) {
       const tr = document.createElement('tr');
       const chainage = f.chainage_m != null ? f.chainage_m + ' m' : '—';
-      const finding = f.error ? `<span class="cause">${f.error}</span>`
-        : (f.hazard_found ? f.summary : 'No hazard noted');
-      tr.innerHTML = `<td>${f.filename}</td><td>${chainage}</td><td>${finding}</td><td>${f.severity || '—'}</td>`;
+      const category = (f.category || '—').replace(/_/g, ' ');
+
+      const tdFile = document.createElement('td'); tdFile.textContent = f.filename;
+      const tdChainage = document.createElement('td'); tdChainage.textContent = chainage;
+      const tdCategory = document.createElement('td'); tdCategory.textContent = category;
+      const tdFinding = document.createElement('td');
+      if (f.error) {
+        const span = document.createElement('span');
+        span.className = 'cause';
+        span.textContent = f.error;
+        tdFinding.appendChild(span);
+      } else {
+        tdFinding.textContent = f.hazard_found ? f.summary : 'No hazard noted';
+      }
+      const tdSeverity = document.createElement('td'); tdSeverity.textContent = f.severity || '—';
+      const tdRec = document.createElement('td'); tdRec.textContent = f.recommendation || '—';
+
+      tr.append(tdFile, tdChainage, tdCategory, tdFinding, tdSeverity, tdRec);
       tbody.appendChild(tr);
     }
     table.style.display = '';
     fileInput.value = '';
     videoInput.value = '';
+    gpxInput.value = '';
+    offsetInput.value = '';
     startInput.value = '';
     endInput.value = '';
+    if (data.findings.some(f => f.hazard_found && f.chainage_m != null)) {
+      const mapFrame = document.getElementById('map-frame');
+      mapFrame.src = mapFrame.src;
+    }
   } catch (e) {
     status.textContent = 'Request failed: ' + e;
   } finally {

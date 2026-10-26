@@ -197,31 +197,81 @@ DATA:
 
 MAX_VISION_PHOTOS = 6
 VISION_MODEL = "claude-opus-5"
+# Generous enough for consumer GPS drift (worse under canopy), tight enough
+# to reject a photo/frame whose GPS fix is nowhere near this trail at all
+# (wrong trail, stale/cached location, or an unrelated ride) instead of
+# silently snapping it onto the trail anyway — see nearest_chainage.
+VISION_GPS_MAX_DISTANCE_M = 200
 
 
-def analyze_trail_photo(photo_bytes, media_type='image/jpeg', api_key=None):
+HAZARD_CATEGORIES = ['root', 'loose_rock', 'jump_or_drop', 'erosion', 'surface_condition', 'exposure', 'other']
+
+
+def analyze_trail_photo(photo_bytes, media_type='image/jpeg', api_key=None, stated_grade=None):
     """AI trail camera prototype: send one photo to a vision-capable Claude
     model, asking it to flag the technical features/hazards bare-earth
     LiDAR can't see. This is the realistic near-term path from the
     /roadmap/vision page, not the custom-trained production pipeline
     documented there — sampling individual geotagged photos through an
-    existing model, no training involved. Returns a dict or None on
-    failure (bad key, model error, unparseable response)."""
+    existing model, no training involved (there is no training step in
+    this prototype at all — the fix for vague/unhelpful output here is
+    prompt specificity, not a dataset).
+
+    stated_grade (the trail's signposted NZ MTB grade, 1-6) is optional
+    context so a feature expected at that grade — e.g. a jump on a
+    signposted grade 5 jump trail — isn't flagged as a "hazard" the way
+    the same feature would be on a grade 2 trail; without it severity
+    calibration has no reference point. Returns a dict or None on failure
+    (bad key, model error, unparseable response)."""
     client = anthropic.Anthropic(api_key=api_key) if (anthropic and api_key) else _anthropic_client
     if not client:
         return None
+    grade_context = (
+        f"This trail is signposted as NZ MTB grade {stated_grade} — judge severity "
+        f"relative to what a rider on a grade {stated_grade} trail should already expect "
+        f"(e.g. a jump lip is normal on a grade 5+ jump trail and not a hazard there, but "
+        f"would be on a grade 2 trail). "
+    ) if stated_grade else ""
     prompt = (
         "This is a single photo taken on a mountain bike trail. Bare-earth LiDAR "
         "elevation data already grades this trail's gradient, turn radius and "
         "cross-slope — it cannot see what's in this photo: roots, loose rock, "
         "jump lips or drops, erosion, exposure, or surface condition. Look only "
         "for technical features or hazards actually visible in this photo.\n\n"
+        f"{grade_context}"
+        "Generic phrases like \"exercise caution\" or \"trail looks rough\" are "
+        "useless to an inspector — every finding must name the exact feature, "
+        "roughly where it sits in frame (e.g. \"across the full tread width\", "
+        "\"on the outside of the turn\", \"on the landing\"), and a size "
+        "estimate if visible.\n\n"
+        "A single photo has no inherent scale — a small rock close up and a "
+        "big rock far away can look identical — so a size estimate is only "
+        "trustworthy if it's calibrated against something of known real-world "
+        "size actually visible in frame. If part of the bike is visible (most "
+        "useful: a wheel — a 29\" mountain bike wheel's outer diameter, tyre "
+        "included, is about 0.74 m; a 27.5\" wheel is about 0.70 m — or failing "
+        "that a crank arm at about 0.175 m), use it as a ruler and say so (e.g. "
+        "\"~0.3m root cluster, estimated against the visible front wheel\"). If "
+        "nothing of known size is visible, still give your best estimate but "
+        "say explicitly that it's an uncalibrated visual guess (e.g. \"a 1m+ "
+        "drop, rough visual estimate — no reference object in frame\"), so an "
+        "inspector can tell a measured figure from a guess.\n\n"
         "Respond with ONLY a JSON object (no markdown fences, no other text):\n"
         '  "hazard_found": true or false\n'
-        '  "summary": one short plain-English sentence describing what you see '
-        'that matters for a trail inspector, or "" if hazard_found is false\n'
-        '  "severity": "minor", "moderate", or "significant" if hazard_found is '
-        'true, otherwise null\n'
+        f'  "category": one of {HAZARD_CATEGORIES} if hazard_found is true, otherwise null\n'
+        '  "summary": one specific sentence naming the exact feature, its '
+        'position in frame, and a size estimate labelled as calibrated or a '
+        'rough guess per above — not a generic warning — or "" if hazard_found '
+        'is false\n'
+        '  "severity": "minor" (cosmetic, doesn\'t change the ride), "moderate" '
+        '(needs line choice/caution but rideable at the stated grade), or '
+        '"significant" (a rider at the stated grade could reasonably not expect '
+        'this and get hurt, or it undermines the signposted grade) if '
+        'hazard_found is true, otherwise null\n'
+        '  "recommendation": one short concrete inspector action (e.g. '
+        '"regrade/remove root cluster", "flag for re-signposting", "monitor '
+        'erosion next inspection", "no action needed") or "" if hazard_found is '
+        'false\n'
         "Don't invent anything not visible in the photo — if it just looks like "
         "unremarkable trail tread, hazard_found is false."
     )
@@ -229,21 +279,27 @@ def analyze_trail_photo(photo_bytes, media_type='image/jpeg', api_key=None):
         import base64
         b64 = base64.b64encode(photo_bytes).decode('ascii')
         msg = client.messages.create(
-            model=VISION_MODEL, max_tokens=300,
+            model=VISION_MODEL, max_tokens=1000,
             messages=[{"role": "user", "content": [
                 {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64}},
                 {"type": "text", "text": prompt},
             ]}],
         )
-        text = next(b.text for b in msg.content if b.type == "text").strip()
+        text = next((b.text for b in msg.content if b.type == "text"), None)
+        if text is None:
+            raise ValueError(f"No text content in model response (stop_reason={msg.stop_reason})")
+        text = text.strip()
         if text.startswith('```'):
             text = text.split('```')[1]
             text = text[4:] if text.startswith('json') else text
         data = json.loads(text.strip())
+        category = data.get('category')
         return {
             'hazard_found': bool(data.get('hazard_found')),
+            'category': category if category in HAZARD_CATEGORIES else None,
             'summary': (data.get('summary') or '').strip(),
             'severity': data.get('severity'),
+            'recommendation': (data.get('recommendation') or '').strip(),
         }
     except Exception:
         traceback.print_exc()
@@ -568,8 +624,14 @@ def run_vision(run_id):
     """AI trail camera prototype (see /roadmap/vision for the full
     architecture and what this isn't). Each uploaded photo is matched to a
     chainage via its own GPS EXIF, then sent to Claude vision to flag
-    hazards LiDAR can't see. Findings accumulate on the run across repeat
-    uploads rather than replacing each other."""
+    hazards LiDAR can't see. Video frames have no GPS of their own; if a
+    companion GPX track is uploaded alongside the video, each frame's
+    elapsed time (plus an optional offset, for when recording and GPX
+    logging didn't start at exactly the same moment) is matched against
+    the GPX track's own elapsed time to find its real position — falling
+    back to linear interpolation between a manually-entered start/end
+    metre range if no GPX is given. Findings accumulate on the run across
+    repeat uploads rather than replacing each other."""
     result = RUNS.get(run_id)
     if result is None:
         abort(404)
@@ -586,6 +648,7 @@ def run_vision(run_id):
 
     points = result.get('points_wgs84_dense') or []
     trail_length_m = result.get('trail_length_m')
+    stated_grade = result.get('stated_grade')
     findings = []
 
     for f in photos:
@@ -600,9 +663,10 @@ def run_vision(run_id):
         chainage_m = lat = lon = None
         if gps and points:
             lat, lon = gps
-            chainage_m = gv11.nearest_chainage(points, lat, lon)
+            chainage_m = gv11.nearest_chainage(points, lat, lon, max_distance_m=VISION_GPS_MAX_DISTANCE_M)
 
-        analysis = analyze_trail_photo(photo_bytes, media_type=media_type, api_key=api_key)
+        analysis = analyze_trail_photo(photo_bytes, media_type=media_type, api_key=api_key,
+                                        stated_grade=stated_grade)
         if analysis is None:
             findings.append({'filename': f.filename, 'chainage_m': chainage_m,
                              'error': 'Analysis failed — see server console.'})
@@ -619,11 +683,11 @@ def run_vision(run_id):
             findings.append({'filename': video.filename, 'chainage_m': None,
                              'error': 'Not a recognised video format — skipped.'})
         else:
-            # No per-frame GPS (see extract_video_frames) — if the uploader
-            # gives a start/end chainage for the whole clip, interpolate
-            # each frame's position linearly between them by how far
-            # through the video it falls. Left blank, frames just get no
-            # chainage, same as a photo with no GPS.
+            # Prefer a real GPS match via a companion GPX track, if one was
+            # uploaded alongside the video — see gps_at_time/parse_gpx_track.
+            # Falls back to linear interpolation between a manually-entered
+            # start/end chainage if no GPX is given, or no GPX file at all
+            # (frames just get no chainage, same as a photo with no GPS).
             def _parse_m(key):
                 try:
                     v = float(request.form.get(key, ''))
@@ -631,6 +695,21 @@ def run_vision(run_id):
                     return None
                 return max(0.0, min(v, trail_length_m)) if trail_length_m else v
             start_m, end_m = _parse_m('video_start_m'), _parse_m('video_end_m')
+
+            try:
+                offset_s = float(request.form.get('video_gpx_offset_s', '') or 0)
+            except (TypeError, ValueError):
+                offset_s = 0.0
+
+            gpx_file = request.files.get('gpx')
+            gpx_track = gpx_error = None
+            if gpx_file and gpx_file.filename:
+                try:
+                    gpx_track = gv11.parse_gpx_track(gpx_file.read())
+                except Exception as e:
+                    gpx_error = str(e)
+                    findings.append({'filename': gpx_file.filename, 'chainage_m': None,
+                                     'error': f'Could not use that GPX track: {e}'})
 
             try:
                 frames = gv11.extract_video_frames(video.read(), filename_hint=video.filename,
@@ -641,19 +720,27 @@ def run_vision(run_id):
                 findings.append({'filename': video.filename, 'chainage_m': None,
                                  'error': f'Could not read that video: {e}'})
 
-            for i, (jpeg_bytes, fraction) in enumerate(frames):
-                chainage_m = None
-                if start_m is not None and end_m is not None:
+            for i, (jpeg_bytes, fraction, elapsed_s) in enumerate(frames):
+                chainage_m = lat = lon = None
+                gps_found = False
+                if gpx_track:
+                    target_ts = gpx_track[0][0] + offset_s + elapsed_s
+                    lat, lon = gv11.gps_at_time(gpx_track, target_ts)
+                    chainage_m = (gv11.nearest_chainage(points, lat, lon, max_distance_m=VISION_GPS_MAX_DISTANCE_M)
+                                  if points else None)
+                    gps_found = True
+                elif start_m is not None and end_m is not None:
                     chainage_m = round(start_m + fraction * (end_m - start_m))
-                analysis = analyze_trail_photo(jpeg_bytes, media_type='image/jpeg', api_key=api_key)
+                analysis = analyze_trail_photo(jpeg_bytes, media_type='image/jpeg', api_key=api_key,
+                                                stated_grade=stated_grade)
                 label = f"{video.filename} @ {round(fraction * 100)}%"
                 if analysis is None:
                     findings.append({'filename': label, 'chainage_m': chainage_m,
                                      'error': 'Analysis failed — see server console.'})
                     continue
                 findings.append({
-                    'filename': label, 'chainage_m': chainage_m, 'lat': None, 'lon': None,
-                    'gps_found': False, **analysis,
+                    'filename': label, 'chainage_m': chainage_m, 'lat': lat, 'lon': lon,
+                    'gps_found': gps_found, **analysis,
                 })
 
     result.setdefault('vision_findings', []).extend(findings)

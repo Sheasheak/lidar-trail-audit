@@ -403,23 +403,107 @@ def extract_photo_gps(photo_bytes):
             return None
         lat = _to_deg(gps_ifd[2], gps_ifd.get(1, "N"))
         lon = _to_deg(gps_ifd[4], gps_ifd.get(3, "E"))
+        # A zero-denominator GPS rational (seen in the wild on at least one
+        # real photo) doesn't raise — Pillow's IFDRational quietly divides
+        # to nan instead — so this can't rely on the except below. Treat
+        # that the same as "no GPS" rather than letting a nan/inf lat/lon
+        # flow downstream, where nan's "always false" comparisons would
+        # silently defeat any distance sanity-check a caller applies.
+        if not (math.isfinite(lat) and math.isfinite(lon)):
+            return None
         return lat, lon
     except Exception:
         return None
 
 
-def nearest_chainage(points_wgs84_dense, lat, lon):
+def nearest_chainage(points_wgs84_dense, lat, lon, max_distance_m=None):
     """Index of the 1 m-densified point closest to (lat, lon) — since the
     line is sampled at ~1 m spacing, that index doubles as the chainage in
     metres. Simple nearest-neighbour, not GIS snapping; good enough for
     placing a hazard flagged from a GPS-tagged photo onto the same
-    chainage grid as the gradient/radius/sideslope data."""
+    chainage grid as the gradient/radius/sideslope data.
+
+    max_distance_m, if given, rejects the match (returns None) when even
+    the closest trail point is farther than that real-world distance away
+    — otherwise a GPS fix nowhere near this trail at all (wrong trail, a
+    stale/cached location fix, or a photo from an unrelated ride) still
+    silently gets snapped to *some* point and placed on the map as if it
+    were real. The ranking loop itself stays plain squared-degree distance
+    (fine for comparing candidates against each other); only the final
+    accept/reject check converts to metres, since degrees aren't metres
+    and a threshold in degrees would mean something different at every
+    latitude."""
     best_i, best_d2 = 0, float("inf")
     for i, (plon, plat) in enumerate(points_wgs84_dense):
         d2 = (plon - lon) ** 2 + (plat - lat) ** 2
         if d2 < best_d2:
             best_i, best_d2 = i, d2
+    if max_distance_m is not None:
+        plon, plat = points_wgs84_dense[best_i]
+        mean_lat_rad = math.radians((plat + lat) / 2)
+        dx_m = (plon - lon) * 111_320 * math.cos(mean_lat_rad)
+        dy_m = (plat - lat) * 110_540
+        if math.hypot(dx_m, dy_m) > max_distance_m:
+            return None
     return best_i
+
+
+def parse_gpx_track(gpx_bytes):
+    """Sorted list of (unix_timestamp, lat, lon) trackpoints from a GPX file
+    — the companion-GPS-log path for video chainage matching (see
+    gps_at_time), since video files themselves carry at most one GPS fix
+    (if any), not a per-frame track. GPX is plain timestamped XML
+    (<trkpt lat lon><time>), so stdlib ElementTree is enough — no gpxpy
+    dependency needed. Raises ValueError if no timestamped points are
+    found (untimed GPX tracks can't be matched to video frames)."""
+    import xml.etree.ElementTree as ET
+    from datetime import datetime, timezone
+
+    root = ET.fromstring(gpx_bytes)
+    uri = root.tag.split("}")[0].strip("{") if root.tag.startswith("{") else ""
+    clark = (lambda name: f"{{{uri}}}{name}") if uri else (lambda name: name)
+
+    points = []
+    for trkpt in root.iter(clark("trkpt")):
+        time_el = trkpt.find(clark("time"))
+        lat, lon = trkpt.get("lat"), trkpt.get("lon")
+        if time_el is None or time_el.text is None or lat is None or lon is None:
+            continue
+        ts_str = time_el.text.strip().replace("Z", "+00:00")
+        try:
+            dt = datetime.fromisoformat(ts_str)
+        except ValueError:
+            continue
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        points.append((dt.timestamp(), float(lat), float(lon)))
+
+    if not points:
+        raise ValueError("No timestamped trackpoints found in that GPX file.")
+    points.sort(key=lambda p: p[0])
+    return points
+
+
+def gps_at_time(track, target_ts):
+    """(lat, lon) from a parse_gpx_track() track closest in time to
+    target_ts (a unix timestamp) — nearest-neighbour by time, not
+    interpolated between the two bracketing points, since GPX logging
+    intervals (typically 1 s) are already finer than the chainage grid
+    this feeds into. Returns None for an empty track."""
+    import bisect
+
+    if not track:
+        return None
+    timestamps = [p[0] for p in track]
+    i = bisect.bisect_left(timestamps, target_ts)
+    if i == 0:
+        best = track[0]
+    elif i == len(track):
+        best = track[-1]
+    else:
+        before, after = track[i - 1], track[i]
+        best = before if (target_ts - before[0]) <= (after[0] - target_ts) else after
+    return best[1], best[2]
 
 
 # Approximate centre of each of NZ's 16 regional council areas (lat, lon) —
@@ -467,13 +551,15 @@ def extract_video_frames(video_bytes, filename_hint="clip.mp4", max_frames=6):
     the sampling interval to the clip's own duration, not a fixed seconds
     value, which also keeps Claude vision call count (cost/time) bounded.
 
-    No per-frame GPS: that would mean parsing GPMF (GoPro) or similar
-    embedded telemetry, a genuinely hard binary format — exactly the
-    "accuracy/drift correction" open question already flagged on
-    /roadmap/vision. Caller interpolates chainage from a start/end metre
-    range instead, if given (see run_vision's video_start_m/video_end_m).
+    No per-frame GPS of its own: that would mean parsing GPMF (GoPro) or
+    similar embedded telemetry, a genuinely hard binary format. Instead the
+    caller can match each frame's elapsed_s against a separately-uploaded
+    GPX track's own elapsed time (see gps_at_time) to find its real
+    position, falling back to interpolating chainage from a start/end
+    metre range if no GPX is given (see run_vision's
+    video_start_m/video_end_m).
 
-    Returns a list of (jpeg_bytes, fraction_through_video) tuples.
+    Returns a list of (jpeg_bytes, fraction_through_video, elapsed_s) tuples.
     Writes to a real temp file rather than decoding from bytes in memory —
     imageio's ffmpeg plugin needs a seekable path, and decoding one frame
     at a time (not the whole video) keeps peak memory close to a single
@@ -510,7 +596,7 @@ def extract_video_frames(video_bytes, filename_hint="clip.mp4", max_frames=6):
             img = Image.fromarray(arr)
             buf = _io.BytesIO()
             img.save(buf, format="JPEG", quality=80)
-            results.append((buf.getvalue(), t / duration_s if duration_s else 0.0))
+            results.append((buf.getvalue(), t / duration_s if duration_s else 0.0, t))
         return results
     finally:
         if tmp_path and _os.path.exists(tmp_path):
@@ -664,6 +750,14 @@ def sideslope_color(a):
     if a < 30: return "#ff8800"
     if a < 45: return "#ff4400"
     return "#cc0000"
+
+
+def vision_severity_color(severity):
+    """Colour for an AI trail camera finding marker — same green/yellow/
+    orange/red convention as gradient_color/radius_color/sideslope_color,
+    just with three buckets instead of five since severity only has three
+    values."""
+    return {"minor": "#ffcc00", "moderate": "#ff8800", "significant": "#cc0000"}.get(severity, "#888888")
 
 
 def _png_b64(fig):
@@ -1130,6 +1224,45 @@ def render_folium_map(result):
     gradient_exceed_layer.add_to(m)
     radius_exceed_layer.add_to(m)
     sideslope_exceed_layer.add_to(m)
+
+    # ---- AI trail camera findings — the fusion step from /roadmap/vision
+    # stage 05: hazards flagged from an uploaded photo/video frame (see
+    # run_vision), already matched to a chainage via GPS EXIF or a
+    # companion GPX track, plotted at that chainage on the same map as the
+    # LiDAR-derived layers instead of only appearing in a separate table.
+    # Only hazard_found findings get a pin — "no hazard" results would just
+    # clutter the map with points that have nothing to show. Findings with
+    # no chainage (no GPS/GPX available) can't be placed, so they're
+    # skipped here too; they still show in the table.
+    import html as _html
+
+    vision_layer = folium.FeatureGroup(name="AI camera findings", show=True)
+    for f in result.get("vision_findings", []):
+        if not f.get("hazard_found") or f.get("chainage_m") is None:
+            continue
+        idx = max(0, min(len(pts) - 1, int(f["chainage_m"])))
+        lon, lat = pts[idx]
+        severity = f.get("severity")
+        category = (f.get("category") or "finding").replace("_", " ")
+        # Model-generated text (summary/recommendation/category come from the
+        # vision model reading an uploaded image) goes through html.escape
+        # before landing in Folium's tooltip/popup HTML — a crafted photo
+        # attempting prompt injection shouldn't be able to inject markup/JS
+        # into the map page.
+        summary_safe = _html.escape(f.get("summary") or "")
+        category_safe = _html.escape(category.title())
+        severity_safe = _html.escape(severity or "unknown severity")
+        tip = _html.escape(f"{f['chainage_m']} m — {category}: {f.get('summary') or ''}")
+        popup_lines = [f"<b>{category_safe}</b> — {severity_safe}"]
+        if summary_safe:
+            popup_lines.append(summary_safe)
+        if f.get("recommendation"):
+            popup_lines.append(f"<i>{_html.escape(f['recommendation'])}</i>")
+        folium.CircleMarker(location=[lat, lon], radius=8, color=vision_severity_color(severity),
+                             fill=True, fill_opacity=0.9, weight=2, tooltip=tip,
+                             popup=folium.Popup("<br>".join(popup_lines), max_width=260)
+                             ).add_to(vision_layer)
+    vision_layer.add_to(m)
 
     # ---- manual field notes — a point an inspector drops for something
     # they've spotted on the ground (a root, loose rock, a jump needing
