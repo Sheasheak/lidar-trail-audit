@@ -6,6 +6,12 @@
 <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
 <title>{{ r.trail_name }} — LiDAR Trail Audit</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='audit.css') }}">
+<style>
+  /* Applied by the "Customize what's shown" panel — !important so it wins
+     over any inline style other JS on this page sets later (e.g. the AI
+     summary/recommendation cards toggling their own display:none/''). */
+  .feature-hidden { display: none !important; }
+</style>
 </head>
 <body>
 <div id="perfNote" style="position:relative;background:#5a4a00;color:#ffe9a8;font:13px/1.5 -apple-system,Segoe UI,sans-serif;padding:8px 36px;text-align:center;border-bottom:1px solid #8a7200"><strong>Note:</strong> grading previously ran in under 30 seconds &mdash; hosting has been temporarily moved to a cheaper plan while we optimise memory use, so it may run slower right now.<button onclick="document.getElementById('perfNote').style.display='none';localStorage.setItem('perfNoteDismissed','1')" aria-label="Dismiss" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:0;color:#ffe9a8;font-size:18px;line-height:1;cursor:pointer;padding:4px 8px">&times;</button></div>
@@ -55,13 +61,25 @@
     <div class="stat"><dt>Corners found</dt><dd>{{ r.n_corners }}</dd></div>
   </dl>
 
+  <!-- ================= CUSTOMIZE VIEW ================= -->
+  <section class="card" id="customize-view-card" style="margin-top:16px;padding:12px 18px">
+    <button type="button" id="customize-view-toggle" class="ghost"
+            style="font-size:12.5px;padding:5px 11px" aria-expanded="false" aria-controls="customize-view-body">
+      Customize what's shown on this page ▾
+    </button>
+    <div id="customize-view-body" style="display:none;margin-top:12px;flex-wrap:wrap;gap:14px 22px">
+      <!-- Checkboxes populated by JS from FEATURE_TOGGLES below, so the
+           list and the data-feature attributes it drives can't drift apart. -->
+    </div>
+  </section>
+
   <p class="sec-note" style="color:var(--ink-3);font-size:13px;margin:22px 0 0">
     LiDAR sub-grades — gradient {{ r.gradient_grade }} ({{ r.gradient_reason }}), corners {{ r.radius_grade }}
     ({{ r.radius_reason }}). Answer the questions below and let Claude settle the final grade.
   </p>
 
   <!-- ================= OUT-OF-GRADE SECTIONS ================= -->
-  <section class="card" id="exceed-card" style="margin-top:14px">
+  <section class="card" id="exceed-card" data-feature="exceed" style="margin-top:14px">
     <h3>Out-of-grade sections — vs stated Grade {{ r.stated_grade }}</h3>
     <p class="card-sub">Actual stretches of the trail that fail the <em>signposted</em> grade, not the measured
       grade — this is what decides whether the current sign is still defensible. Each section lists every reason
@@ -103,7 +121,7 @@
   </section>
 
   <!-- ================= QUESTIONS + AI GRADING ================= -->
-  <section class="card" id="ai-summary-card" style="margin-top:14px">
+  <section class="card" id="ai-summary-card" data-feature="ai-summary" style="margin-top:14px">
     <h3>Grade this trail</h3>
     <p class="card-sub">Claude combines the LiDAR figures above with your field observations to settle the final
       grade, then writes a summary and recommendation for a trail manager. Uses only the computed numbers —
@@ -177,19 +195,19 @@
   </div>
 
   <!-- ================= AI SUMMARY ================= -->
-  <section class="card" id="ai-summary-text-card" style="margin-top:24px;display:none">
+  <section class="card" id="ai-summary-text-card" data-feature="ai-summary" style="margin-top:24px;display:none">
     <h3>Plain-language summary</h3>
     <div id="ai-summary-text" style="white-space:pre-wrap;font-size:14px;line-height:1.6"></div>
   </section>
 
   <!-- ================= AI RECOMMENDATION (separate box) ================= -->
-  <section class="card" id="ai-recommendation-card" style="margin-top:24px;display:none">
+  <section class="card" id="ai-recommendation-card" data-feature="ai-summary" style="margin-top:24px;display:none">
     <h3>Recommendation</h3>
     <div id="ai-recommendation-text" style="white-space:pre-wrap;font-size:14px;line-height:1.6"></div>
   </section>
 
   <!-- ================= AI TRAIL CAMERA (prototype) ================= -->
-  <section class="card" id="vision-card" style="margin-top:24px">
+  <section class="card" id="vision-card" data-feature="vision" style="margin-top:24px">
     <h3>AI trail camera <span class="roadmap-badge" style="display:inline-block;font-family:var(--font-mono);font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-3);border:1px solid var(--rule);border-radius:4px;padding:2px 7px;vertical-align:middle;margin-left:6px">Prototype</span></h3>
     <p class="card-sub">
       LiDAR can't see roots, loose rock, jump lips or surface condition. Upload geotagged photos or a
@@ -256,7 +274,7 @@
   </section>
 
   <!-- ================= 3D ================= -->
-  <section>
+  <section data-feature="3d">
     <div class="sec-head">
       <h2>3D terrain</h2>
       <div class="note">Fetches a live terrain grid from LINZ — can take a moment</div>
@@ -274,7 +292,7 @@
   </section>
 
   <!-- ================= PLAN VIEW ================= -->
-  <section>
+  <section data-feature="map">
     <div class="sec-head">
       <h2>Plan view</h2>
       <div class="note">Gradient, sideslope, and turn radius, plotted along the line</div>
@@ -302,7 +320,7 @@
   </section>
 
   <!-- ================= CHARTS ================= -->
-  <section>
+  <section data-feature="profiles">
     <div class="sec-head">
       <h2>Profiles</h2>
       <div class="note">Matplotlib, same as the notebook</div>
@@ -346,6 +364,63 @@
 </div>
 
 <script>
+(function () {
+  // Per-page-section show/hide — a DOC inspector doing a quick field check
+  // doesn't need the 3D view or charts cluttering the page, so let them
+  // turn off whatever they don't want. Persisted in localStorage (not
+  // per-run) since it's a viewing preference, the same across every audit
+  // someone looks at, not something tied to one trail's result page.
+  const FEATURE_TOGGLES = [
+    { key: 'exceed', label: 'Out-of-grade sections' },
+    { key: 'ai-summary', label: 'Grade this trail (AI)' },
+    { key: 'vision', label: 'AI trail camera' },
+    { key: 'map', label: 'Plan view map' },
+    { key: '3d', label: '3D terrain' },
+    { key: 'profiles', label: 'Profiles (gradient/sideslope charts)' },
+  ];
+  const STORAGE_KEY = 'trailsafe_hidden_features';
+
+  function loadHidden() {
+    try { return new Set(JSON.parse(localStorage.getItem(STORAGE_KEY)) || []); }
+    catch (e) { return new Set(); }
+  }
+  function saveHidden(hidden) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([...hidden]));
+  }
+  function applyFeature(key, hide) {
+    document.querySelectorAll(`[data-feature="${key}"]`).forEach(el => {
+      el.classList.toggle('feature-hidden', hide);
+    });
+  }
+
+  const hidden = loadHidden();
+  const body = document.getElementById('customize-view-body');
+  FEATURE_TOGGLES.forEach(({ key, label }) => {
+    applyFeature(key, hidden.has(key));
+
+    const row = document.createElement('label');
+    row.style.cssText = 'display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--ink-2);cursor:pointer';
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.checked = !hidden.has(key);
+    box.addEventListener('change', () => {
+      if (box.checked) { hidden.delete(key); } else { hidden.add(key); }
+      saveHidden(hidden);
+      applyFeature(key, !box.checked);
+    });
+    row.append(box, document.createTextNode(label));
+    body.appendChild(row);
+  });
+
+  const toggleBtn = document.getElementById('customize-view-toggle');
+  toggleBtn.addEventListener('click', () => {
+    const show = body.style.display === 'none';
+    body.style.display = show ? 'flex' : 'none';
+    toggleBtn.setAttribute('aria-expanded', show ? 'true' : 'false');
+    toggleBtn.textContent = show ? "Customize what's shown on this page ▴" : "Customize what's shown on this page ▾";
+  });
+})();
+
 const STATED_GRADE = {{ r.stated_grade }};
 const GRADE_NAMES = {{ grade_colours | tojson }};
 
