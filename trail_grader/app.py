@@ -279,7 +279,7 @@ def analyze_trail_photo(photo_bytes, media_type='image/jpeg', api_key=None, stat
         import base64
         b64 = base64.b64encode(photo_bytes).decode('ascii')
         msg = client.messages.create(
-            model=VISION_MODEL, max_tokens=1000,
+            model=VISION_MODEL, max_tokens=1500,
             messages=[{"role": "user", "content": [
                 {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64}},
                 {"type": "text", "text": prompt},
